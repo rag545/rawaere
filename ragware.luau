@@ -209,7 +209,7 @@ local DEFAULTS = {
     hp_back_c = {0, 0, 0}, hp_back_trans = 0.4, hp_outline = false, hp_outline_c = {0, 0, 0},
     hp_text = false, hp_text_mode = "Health", hp_text_size = 11, hp_text_follow = true, hp_text_fill = true,
     hp_text_c = {255, 255, 255}, hp_show_below = 100, hp_smooth = 0,
-    -- esp: look of each element. "Player color" = the team color (or the target color); numeric thickness controls enforce a 1-unit minimum
+    -- esp: look of each element. "Player color" = the team color (or the target color); thickness 0 = ESP style thickness
     box_style = "Full", box_corner = 25, box_color_mode = "Player color", box_color = {255, 255, 255}, box_thick = 0,
     box_trans = 0, box_outline = false, box_fill = false, box_fill_player = true, box_fill_c = {255, 255, 255},
     box_fill_trans = 0.8,
@@ -311,7 +311,6 @@ local function copy(v)
     return t
 end
 
-local NUMERIC_BOUNDS = {}   -- registered by numeric controls; also enforced when configs are loaded
 local S = {}
 for k, v in pairs(DEFAULTS) do S[k] = copy(v) end
 for k, v in pairs(THEME_DEFAULTS) do S[k] = copy(v) end
@@ -696,11 +695,6 @@ function ST.convert(k, def, v)
             return {tonumber(v[1]) or 0, tonumber(v[2]) or 0, tonumber(v[3]) or 0}
         end
         return nil
-    elseif type(def) == "number" and type(v) == "number" then
-        if v ~= v or v == math.huge or v == -math.huge then return nil end
-        local bounds = NUMERIC_BOUNDS[k]
-        if bounds then return math.clamp(v, bounds[1], bounds[2]) end
-        return v
     elseif type(v) == type(def) then
         return v
     end
@@ -892,7 +886,7 @@ local function ctlStyle(surface, c)
     end
     if not c.flat then
         local lab = ctlLabel(surface)
-        if lab then lab.TextSize = S.ctl_text end
+        if lab then lab.TextSize = math.max(S.ctl_text, 1) end
     end
 end
 
@@ -956,8 +950,8 @@ local function switch(parent, rightOff)
     local knc = new("UICorner", {}, knob)
     -- size, shape and colors come from Theme > Switches (every switch is refreshed by applyTheme)
     return function(on, instant)
-        local w, h = S.sw_w, S.sw_h
-        local k = math.min(S.sw_knob, h)
+        local w, h = math.max(S.sw_w, 10), math.max(S.sw_h, 6)   -- a switch never gets so small that it disappears
+        local k = math.max(math.min(S.sw_knob, h), 2)
         local m = math.floor((h - k) / 2)
         local shape = S.sw_shape
         sw.Size = UDim2.fromOffset(w, h)
@@ -1045,22 +1039,7 @@ local function Feature(parent, label, key, o)
     return sub
 end
 
-local function sliderBounds(mn, mx)
-    -- Positive scalar settings use 1..max. Unit-range controls (opacity, transparency,
-    -- and normalized proportions) retain their 0..1 semantics instead of becoming unusable.
-    if mx > 1 then mn = math.max(1, mn) end
-    if mn > mx then mn = mx end
-    return mn, mx
-end
-
-local function clampFiniteNumber(value, mn, mx)
-    local n = tonumber(value)
-    if not n or n ~= n or n == math.huge or n == -math.huge then n = mn end
-    return math.clamp(n, mn, mx)
-end
-
 local function Slider(parent, label, get, set, mn, mx, step, suffix, desc)
-    mn, mx = sliderBounds(mn, mx)
     local holder = stack(parent, 0)
     local r = newRow(holder)
     rowLabel(r, label, desc, 74)
@@ -1111,7 +1090,7 @@ local function Slider(parent, label, get, set, mn, mx, step, suffix, desc)
     val.FocusLost:Connect(function()
         local n = tonumber((val.Text:gsub(",", "."):match("-?%d+%.?%d*")))
         if n then
-            n = clampFiniteNumber(n, mn, mx)
+            n = math.clamp(n, mn, mx)
             if step >= 1 then n = math.floor(n + 0.5) else n = math.floor(n * 1000 + 0.5) / 1000 end
             set(n)
         end
@@ -1131,13 +1110,10 @@ local function Slider(parent, label, get, set, mn, mx, step, suffix, desc)
 end
 
 local function SK(parent, label, key, mn, mx, step, suffix, cb, desc)
-    mn, mx = sliderBounds(mn, mx)
-    NUMERIC_BOUNDS[key] = {mn, mx}
-    S[key] = clampFiniteNumber(S[key], mn, mx)
     return Slider(parent, label, function() return S[key] end,
         function(v)
-            S[key] = clampFiniteNumber(v, mn, mx)
-            if cb then cb(S[key]) end
+            S[key] = v
+            if cb then cb(v) end
         end, mn, mx, step, suffix, desc)
 end
 
@@ -1669,6 +1645,7 @@ local NARROW_AT = 560    -- content width below which the two columns become one
 local MF = isMobile and 0.92 or 0.98   -- fraction of the screen the window may fill (margin for notches / edges)
 local TAB_H = isMobile and 36 or 32
 local TITLE_H = 46
+local function SW() return math.max(S.ui_sidew, 90) end   -- the sidebar never gets so thin that the tabs disappear
 local CORNERS = {
     ["Bottom right"] = {1, 1}, ["Bottom left"] = {0, 1}, ["Top right"] = {1, 0}, ["Top left"] = {0, 0},
 }
@@ -1689,7 +1666,7 @@ new("UIGradient", {Transparency = NumberSequence.new({NumberSequenceKeypoint.new
     NumberSequenceKeypoint.new(0.15, 0), NumberSequenceKeypoint.new(0.85, 0), NumberSequenceKeypoint.new(1, 1)})}, topLine)
 
 -- sidebar
-local side = new("Frame", {Name = "Side", Size = UDim2.new(0, S.ui_sidew, 1, 0), BackgroundColor3 = "side",
+local side = new("Frame", {Name = "Side", Size = UDim2.new(0, SW(), 1, 0), BackgroundColor3 = "side",
     BorderSizePixel = 0}, win)
 corner(side, 0)
 local sideFill = new("Frame", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0),
@@ -1726,8 +1703,8 @@ do
 end
 
 -- main area
-local main = new("Frame", {Name = "Main", Position = UDim2.fromOffset(S.ui_sidew, 0),
-    Size = UDim2.new(1, -S.ui_sidew, 1, 0), BackgroundTransparency = 1}, win)
+local main = new("Frame", {Name = "Main", Position = UDim2.fromOffset(SW(), 0),
+    Size = UDim2.new(1, -SW(), 1, 0), BackgroundTransparency = 1}, win)
 local pageTitle = text(main, "Combat", {Position = UDim2.fromOffset(20, 0), Size = UDim2.new(1, -110, 0, TITLE_H),
     TextSize = 17, Font = Enum.Font.GothamBold})
 local miniLogo = text(main, "", {Position = UDim2.fromOffset(16, 0), Size = UDim2.fromOffset(160, TITLE_H), TextSize = 18,
@@ -1752,7 +1729,7 @@ local closeHover = false
 local function styleClose()
     local cr = CORNERS[S.resize_corner] or CORNERS["Bottom right"]
     local gripSpace = (S.resize_on and cr[1] == 1 and cr[2] == 0) and ((isMobile and 34 or 24) + 4) or 0
-    local sz = S.cb_size
+    local sz = math.max(S.cb_size, 12)
     closeBtn.Size = UDim2.fromOffset(sz, sz)
     closeBtn.Position = UDim2.new(1, -(10 + gripSpace), 0, TITLE_H / 2)
     closeBtn.BackgroundColor3 = closeHover and col(S.cb_hover) or col(S.cb_bg)
@@ -1883,8 +1860,8 @@ local function setMode(w)
         end
     end
     -- sizes that depend on the sidebar width (can change at any time)
-    local sw = compact and 0 or S.ui_sidew
-    side.Size = UDim2.new(0, S.ui_sidew, 1, 0)
+    local sw = compact and 0 or SW()
+    side.Size = UDim2.new(0, SW(), 1, 0)
     main.Position = UDim2.fromOffset(sw, 0)
     main.Size = UDim2.new(1, -sw, 1, 0)
     tabs.Position = compact and UDim2.fromOffset(14, TITLE_H) or UDim2.fromOffset(8, 64)
@@ -1896,7 +1873,7 @@ end
 -- columns: two side by side in a wide window, a single one in a narrow window
 local lastNarrow = nil
 local function setColumns(w, force)
-    local narrow = (w - (compact and 0 or S.ui_sidew) - 30) < NARROW_AT
+    local narrow = (w - (compact and 0 or SW()) - 30) < NARROW_AT
     if narrow == lastNarrow and not force then return end
     lastNarrow = narrow
     local half = S.card_gap / 2
@@ -1926,7 +1903,7 @@ onTheme(function()
         c.pad.PaddingBottom = UDim.new(0, math.max(p - 4, 4))
         c.pad.PaddingLeft = UDim.new(0, p)
         c.pad.PaddingRight = UDim.new(0, p)
-        c.label.TextSize = S.card_title_size
+        c.label.TextSize = math.max(S.card_title_size, 1)
         c.label.TextColor3 = (hs == "Accent text") and a or T.dim
         c.label.Position = UDim2.fromOffset(hs == "Accent bar" and 10 or 0, 0)
         c.label.Size = UDim2.new(1, hs == "Accent bar" and -30 or -20, 1, 0)
@@ -1961,7 +1938,7 @@ end
 
 -- window size / position (S.win_*), with limits and a UIScale shrink on small screens
 function layout()
-    local vp, s = viewport(), S.ui_scale
+    local vp, s = viewport(), math.max(S.ui_scale, 0.3)   -- the menu never shrinks to nothing
     local fit = math.min(1, vp.X * MF / (MIN_W * s), vp.Y * 0.96 / (MIN_H * s))
     local sc = s * fit
     uiscale.Scale = sc
@@ -2201,7 +2178,7 @@ local function hudRestyle(h)
     h.btn.BackgroundTransparency = S[k.trans]
     h.stroke.Thickness = S[k.st]
     h.label.Text = S[k.text]
-    h.label.TextSize = S[k.ts]
+    h.label.TextSize = math.max(S[k.ts], 1)
     local hs = math.clamp(math.floor(math.min(w, ht) * 0.4), 12, 22)
     h.handle.Size = UDim2.fromOffset(hs, hs)
     hudPaint(h)
@@ -2670,8 +2647,8 @@ if not isMobile then Keybind(sb, "Key", "aim_key") end
 DK(sb, "Method", "aim_method", {"Camera", "Mouse"}, nil, "Mouse needs an executor (mousemoverel)")
 DK(sb, "Hitbox", "aim_part", {"Head", "Torso", "Root", "Closest"})
 DK(sb, "Priority", "aim_priority", {"Crosshair", "Distance", "Health"})
-SK(sb, "Smooth", "smooth", 0, 99, 1, "%", nil, "Minimum smoothing is 1%; higher values smooth more")
-SK(sb, "Max distance", "aim_maxdist", 50, 5000, 50, " st")
+SK(sb, "Smooth", "smooth", 0, 99, 1, "%", nil, "0% snaps instantly")
+SK(sb, "Max distance", "aim_maxdist", 0, 5000, 50, " st")
 MultiSelect(sb, "Filters", checkItems("aim"), "Targets that fail an enabled filter are skipped by the aimbot")
 sb = Feature(card, "Humanizer", "humanize", {desc = "Human-like imperfections in the aim"})
 SK(sb, "Noise", "human_noise", 0, 5, 0.1, " deg", nil, "Smooth wander around the target")
@@ -2679,10 +2656,10 @@ SK(sb, "Offset", "human_offset", 0, 2, 0.1, " st", nil, "Random aim point inside
 SK(sb, "Reaction delay", "human_delay", 0, 500, 10, " ms", nil, "Waits before engaging a new target")
 SK(sb, "Speed variation", "human_speed", 0, 60, 1, "%")
 sb = Feature(card, "Show FOV", "show_fov")
-SK(sb, "Size", "aim_fov", 10, 800, 5, " px")
+SK(sb, "Size", "aim_fov", 0, 800, 5, " px")
 DK(sb, "Origin", "fov_origin", {"Mouse", "Center"})
 ColorRow(sb, "Color", "fov_color")
-SK(sb, "Thickness", "fov_thick", 0.5, 4, 0.5, "")
+SK(sb, "Thickness", "fov_thick", 0, 4, 0.5, "")
 Toggle(card, "Fullscreen", "fov_fullscreen", nil, "No FOV limit, the circle is hidden")
 
 -- player lists (moved here from the old Targets tab)
@@ -2734,15 +2711,15 @@ DK(sb, "Fire mode", "trigger_mode", {"Click", "Hold"})
 DK(sb, "Fire method", "fire_method", {"Auto", "Executor", "VirtualInput", "Tool", "Screen tap"}, nil,
     "Auto tries executor input, VirtualInput, then the held Tool. Screen tap touches the tap point you place on the screen (mobile)")
 SK(sb, "Reaction delay", "trigger_delay", 0, 500, 5, " ms")
-SK(sb, "Click interval", "trigger_interval", 30, 600, 10, " ms")
-SK(sb, "Range", "trigger_range", 50, 3000, 50, " st")
+SK(sb, "Click interval", "trigger_interval", 0, 600, 10, " ms")
+SK(sb, "Range", "trigger_range", 0, 3000, 50, " st")
 SK(sb, "Tolerance", "trigger_radius", 0, 30, 1, " px", nil, "Pixels around the crosshair that count as a hit")
 Toggle(sb, "Only while aiming", "trigger_aimkey")
 MultiSelect(sb, "Filters", checkItems("trig"), "Same filters as the aimbot, set separately. Wall off = fires through walls")
 Heading(sb, "Screen tap (mobile)")
 DK(sb, "Tap method", "tap_method", {"Auto", "Touch", "Mouse"}, nil,
     "Touch sends a real touch at the tap point, Mouse sends a click there. Auto tries touch first")
-SK(sb, "Tap hold", "tap_hold", 10, 300, 5, " ms", nil, "How long each tap is held down")
+SK(sb, "Tap hold", "tap_hold", 0, 300, 5, " ms", nil, "How long each tap is held down")
 SK(sb, "Tap spread", "tap_jitter", 0, 30, 1, " px", nil, "Random offset around the tap point")
 Toggle(sb, "Lock tap point", "tap_lock", applyTheme, "Drag the marker onto the game's fire button, then lock it. Look and size: Theme > Tap point")
 trigStatus = StatusRow(sb, "Status")
@@ -2758,10 +2735,10 @@ card = Card(PC, "Spinbot", 2)
 sb = Feature(card, "Spinbot", "spinbot")
 DK(sb, "Mode", "spin_mode", {"Spin", "Jitter", "Random", "Backwards"})
 DK(sb, "Method", "spin_method", {"CFrame", "Velocity"}, nil, "Velocity only works in Spin mode")
-SK(sb, "Speed", "spin_speed", 30, 3600, 10, " deg/s")
+SK(sb, "Speed", "spin_speed", 0, 3600, 10, " deg/s")
 Toggle(sb, "Reverse", "spin_reverse")
-SK(sb, "Jitter angle", "spin_jitter", 5, 180, 5, " deg")
-SK(sb, "Jitter rate", "spin_rate", 1, 60, 1, " Hz")
+SK(sb, "Jitter angle", "spin_jitter", 0, 180, 5, " deg")
+SK(sb, "Jitter rate", "spin_rate", 0, 60, 1, " Hz")
 Toggle(sb, "Pause while shooting", "spin_pause", nil, "Stops spinning when you click or the triggerbot fires")
 SK(sb, "Resume delay", "spin_resume", 0, 600, 10, " ms")
 Toggle(sb, "Face aim while shooting", "spin_face", nil, "Turns the body toward the camera so shots go straight")
@@ -2833,10 +2810,10 @@ local COLOR_DESC = "Player color = the team color (or the target color). Custom 
 
 sb = Feature(card, "Box", "esp_box", {desc = "Rectangle around every player"})
 DK(sb, "Style", "box_style", {"Full", "Corners"})
-SK(sb, "Corner length", "box_corner", 10, 50, 1, "%", nil, "Length of each corner line (Corners style)")
+SK(sb, "Corner length", "box_corner", 0, 50, 1, "%", nil, "Length of each corner line (Corners style)")
 DK(sb, "Color", "box_color_mode", COLOR_MODES, nil, COLOR_DESC)
 ColorRow(sb, "Custom color", "box_color")
-SK(sb, "Thickness", "box_thick", 0, 6, 0.5, "", nil, "Uses a positive custom thickness")
+SK(sb, "Thickness", "box_thick", 0, 6, 0.5, "", nil, "0 = use the ESP style thickness")
 SK(sb, "Line transparency", "box_trans", 0, 1, 0.05, "")
 Toggle(sb, "Outline", "box_outline", nil, "Dark outline behind the lines")
 Toggle(sb, "Fill", "box_fill")
@@ -2846,24 +2823,24 @@ SK(sb, "Fill transparency", "box_fill_trans", 0, 1, 0.05, "")
 sb = Feature(card, "Skeleton", "esp_skel", {desc = "Lines along the bones"})
 DK(sb, "Color", "skel_color_mode", COLOR_MODES, nil, COLOR_DESC)
 ColorRow(sb, "Custom color", "skel_color")
-SK(sb, "Thickness", "skel_thick", 0, 6, 0.5, "", nil, "Uses a positive custom thickness")
+SK(sb, "Thickness", "skel_thick", 0, 6, 0.5, "", nil, "0 = use the ESP style thickness")
 SK(sb, "Transparency", "skel_trans", 0, 1, 0.05, "")
 Toggle(sb, "Joints", "skel_joints", nil, "A dot at every joint")
-SK(sb, "Joint size", "skel_joint_size", 2, 12, 1, " px")
+SK(sb, "Joint size", "skel_joint_size", 0, 12, 1, " px")
 sb = Feature(card, "Name", "esp_name")
 DK(sb, "Mode", "esp_namemode", {"Display", "Username"})
 Toggle(sb, "Show team", "name_team", nil, "Puts the team name in front, like [Red] Name")
 DK(sb, "Color", "name_color_mode", COLOR_MODES, nil, COLOR_DESC)
 ColorRow(sb, "Custom color", "name_color")
-SK(sb, "Size", "name_size", 0, 24, 1, " px", nil, "Uses a positive custom text size")
+SK(sb, "Size", "name_size", 0, 24, 1, " px", nil, "0 = use the ESP style text size")
 DK(sb, "Font", "name_font", FONTS)
 SK(sb, "Outline", "name_stroke", 0, 1, 0.05, "", nil, "Transparency of the text outline. 1 = no outline")
 SK(sb, "Height above box", "name_offset", -10, 30, 1, " px")
 sb = Feature(card, "Head circle", "esp_head", {desc = "Circle around the head"})
-SK(sb, "Size", "head_scale", 50, 300, 5, "%")
+SK(sb, "Size", "head_scale", 0, 300, 5, "%")
 DK(sb, "Color", "head_color_mode", COLOR_MODES, nil, COLOR_DESC)
 ColorRow(sb, "Custom color", "head_color")
-SK(sb, "Thickness", "head_thick", 0, 6, 0.5, "", nil, "Uses a positive custom thickness")
+SK(sb, "Thickness", "head_thick", 0, 6, 0.5, "", nil, "0 = use the ESP style thickness")
 SK(sb, "Line transparency", "head_trans", 0, 1, 0.05, "")
 Toggle(sb, "Fill", "head_fill")
 Toggle(sb, "Fill uses player color", "head_fill_player")
@@ -2872,12 +2849,12 @@ SK(sb, "Fill transparency", "head_fill_trans", 0, 1, 0.05, "")
 sb = Feature(card, "Health bar", "esp_health", {desc = "Bar next to the box. Every value can be typed in its box"})
 Heading(sb, "Shape")
 DK(sb, "Side", "hp_side", {"Left", "Right", "Top", "Bottom"}, nil, "Left / Right = vertical bar, Top / Bottom = horizontal bar")
-SK(sb, "Thickness", "hp_width", 2, 14, 1, " px")
-SK(sb, "Length", "hp_len", 20, 100, 5, "%", nil, "Of the box height (width for Top / Bottom)")
+SK(sb, "Thickness", "hp_width", 0, 14, 1, " px")
+SK(sb, "Length", "hp_len", 0, 100, 5, "%", nil, "Of the box height (width for Top / Bottom)")
 SK(sb, "Distance from box", "hp_gap", 0, 24, 1, " px")
 SK(sb, "Inner padding", "hp_pad", 0, 4, 1, " px")
 SK(sb, "Corner radius", "hp_corner", 0, 7, 1, " px")
-SK(sb, "Segments", "hp_segments", 0, 10, 1, "", nil, "Splits the bar into equal parts")
+SK(sb, "Segments", "hp_segments", 0, 10, 1, "", nil, "Splits the bar into equal parts. 0 = off")
 Heading(sb, "Colors")
 DK(sb, "Fill", "hp_color_mode", {"Gradient", "Two colors", "Solid", "Player color"}, nil,
     "Gradient = red to green. Two colors blends low to full health")
@@ -2891,20 +2868,20 @@ ColorRow(sb, "Outline color", "hp_outline_c")
 Heading(sb, "Text")
 Toggle(sb, "Show text", "hp_text")
 DK(sb, "Text", "hp_text_mode", {"Health", "Percent", "Health / Max"})
-SK(sb, "Text size", "hp_text_size", 8, 20, 1, " px")
+SK(sb, "Text size", "hp_text_size", 0, 20, 1, " px")
 Toggle(sb, "Follow the fill", "hp_text_follow", nil, "The text moves with the end of the bar")
 Toggle(sb, "Match bar color", "hp_text_fill")
 ColorRow(sb, "Text color", "hp_text_c", nil, "Used when Match bar color is off")
 Heading(sb, "Behavior")
-SK(sb, "Show when below", "hp_show_below", 1, 100, 1, "%", nil, "Hides the bar above this health. 100 = always visible")
-SK(sb, "Smoothing", "hp_smooth", 0, 95, 1, "%", nil, "Higher values smooth health changes more")
+SK(sb, "Show when below", "hp_show_below", 0, 100, 1, "%", nil, "Hides the bar above this health. 100 = always visible")
+SK(sb, "Smoothing", "hp_smooth", 0, 95, 1, "%", nil, "How slowly the bar follows health changes. 0 = instant")
 sb = Feature(card, "Distance", "esp_dist")
 DK(sb, "Unit", "esp_unit", {"Studs", "Meters"})
 SK(sb, "Decimals", "dist_decimals", 0, 2, 1, "")
 Toggle(sb, "Brackets", "dist_brackets", nil, "Shows [120 st] instead of 120 st")
 DK(sb, "Color", "dist_color_mode", COLOR_MODES, nil, COLOR_DESC)
 ColorRow(sb, "Custom color", "dist_color")
-SK(sb, "Size", "dist_size", 0, 24, 1, " px", nil, "Uses a positive custom text size")
+SK(sb, "Size", "dist_size", 0, 24, 1, " px", nil, "0 = use the ESP style text size")
 DK(sb, "Font", "dist_font", FONTS)
 SK(sb, "Outline", "dist_stroke", 0, 1, 0.05, "", nil, "Transparency of the text outline. 1 = no outline")
 SK(sb, "Distance below box", "dist_offset", -10, 30, 1, " px")
@@ -2913,14 +2890,14 @@ DK(sb, "From", "tracer_from", {"Bottom", "Center", "Top", "Mouse"})
 DK(sb, "To", "tracer_to", {"Feet", "Root", "Head"})
 DK(sb, "Color", "tracer_color_mode", COLOR_MODES, nil, COLOR_DESC)
 ColorRow(sb, "Custom color", "tracer_color")
-SK(sb, "Thickness", "tracer_thick", 0, 6, 0.5, "", nil, "Uses a positive custom thickness")
+SK(sb, "Thickness", "tracer_thick", 0, 6, 0.5, "", nil, "0 = use the ESP style thickness")
 SK(sb, "Transparency", "tracer_trans", 0, 1, 0.05, "")
 
 card = Card(PV, "ESP style", 1)
 Toggle(card, "Show teammates", "esp_team", nil, "Teammates also get ESP and chams")
-SK(card, "Max distance", "esp_maxdist", 100, 10000, 100, " st")
-SK(card, "Line thickness", "esp_thick", 1, 4, 0.5, "")
-SK(card, "Text size", "esp_text", 9, 22, 1, "")
+SK(card, "Max distance", "esp_maxdist", 0, 10000, 100, " st")
+SK(card, "Line thickness", "esp_thick", 0, 4, 0.5, "")
+SK(card, "Text size", "esp_text", 0, 22, 1, "")
 
 -- team colors: the rows under the mode are rebuilt whenever teams change
 local rebuildTeams
@@ -3006,35 +2983,35 @@ ColorRow(sb, "Fill color", "occ_fill_c")
 SK(sb, "Fill transparency", "occ_fill", 0, 1, 0.05, "")
 ColorRow(sb, "Outline color", "occ_line_c")
 SK(sb, "Outline transparency", "occ_line", 0, 1, 0.05, "")
-SK(card, "Max players", "chams_max", 1, 30, 1, "", nil, "Roblox draws 31 highlights; occluded uses 2 per player")
+SK(card, "Max players", "chams_max", 0, 30, 1, "", nil, "Roblox draws 31 highlights; occluded uses 2 per player")
 
 -- Player ------------------------------------------------------------------
 local PP = pages.Player
 
 card = Card(PP, "Movement", 1)
 sb = Feature(card, "WalkSpeed", "walk_on")
-SK(sb, "Speed", "walk", 16, 300, 1, "")
+SK(sb, "Speed", "walk", 0, 300, 1, "")
 sb = Feature(card, "JumpPower", "jump_on")
-SK(sb, "Power", "jump", 50, 400, 1, "")
+SK(sb, "Power", "jump", 0, 400, 1, "")
 Toggle(card, "Infinite jump", "infjump")
 Toggle(card, "Noclip", "noclip")
 sb = Feature(card, "Fly", "fly")
-SK(sb, "Speed", "fly_speed", 10, 300, 5, "")
+SK(sb, "Speed", "fly_speed", 0, 300, 5, "")
 sb = Feature(card, "Bunny hop", "bhop_on")
 DK(sb, "Mode", "bhop_mode", {"Hold", "Moving", "Always"}, nil, "Hold = while Space is held, Moving = while you move")
 Toggle(sb, "Air speed", "bhop_boost", nil, "Keeps a constant speed in the air")
-SK(sb, "Speed", "bhop_speed", 16, 120, 1, "")
+SK(sb, "Speed", "bhop_speed", 0, 120, 1, "")
 
 card = Card(PP, "Camera", 2)
 sb = Feature(card, "Third person", "tp_on", {desc = "Pulls the camera back"})
-SK(sb, "Distance", "tp_dist", 2, 60, 1, " st")
+SK(sb, "Distance", "tp_dist", 0, 60, 1, " st")
 SK(sb, "Height", "tp_height", -5, 15, 0.5, " st")
 SK(sb, "Side offset", "tp_side", -12, 12, 0.5, " st")
 Toggle(sb, "Collision", "tp_collide", nil, "Keeps the camera from clipping into walls")
 Toggle(sb, "Show own body", "tp_body")
 if not isMobile then Keybind(sb, "Key", "tp_key", true, "Backspace clears the key") end
 sb = Feature(card, "FOV changer", "camfov_on")
-SK(sb, "Field of view", "camfov", 40, 120, 1, "")
+SK(sb, "Field of view", "camfov", 0, 120, 1, "")
 
 card = Card(PP, "World", 2)
 sb = Feature(card, "Gravity", "grav_on")
@@ -3188,7 +3165,7 @@ wpRebuild()
 
 card = Card(PTP, "Teleport to player", 2)
 DK(card, "Position", "tele_offset", {"Behind", "In front", "Above", "On target"}, nil, "Where you land relative to the player")
-SK(card, "Distance", "tele_dist", 1, 20, 1, " st")
+SK(card, "Distance", "tele_dist", 0, 20, 1, " st")
 
 local function tpToPlayer(id, name)
     local pl = Players:GetPlayerByUserId(id)
@@ -3226,9 +3203,9 @@ end
 
 card = Card(PTH, "Window", 1)
 SK(card, "Window transparency", "ui_trans", 0, 0.8, 0.02, "", applyTheme)
-SK(card, "Scale", "ui_scale", 0.6, 1.6, 0.05, "x", layout)
+SK(card, "Scale", "ui_scale", 0, 1.6, 0.05, "x", layout)
 SK(card, "Corner radius", "ui_corner", 0, 16, 1, " px", applyTheme)
-SK(card, "Sidebar width", "ui_sidew", 110, 220, 5, " px", layout)
+SK(card, "Sidebar width", "ui_sidew", 0, 220, 5, " px", layout)
 SK(card, "Outline thickness", "ui_stroke", 0, 4, 0.5, "", applyTheme)
 SK(card, "Outline transparency", "ui_stroke_trans", 0, 1, 0.05, "", applyTheme)
 DK(card, "Font", "ui_font", {"GothamMedium", "Gotham", "Ubuntu", "SourceSans", "Arial", "Code"}, applyTheme)
@@ -3250,10 +3227,10 @@ SK(card, "Border thickness", "card_stroke", 0, 4, 0.5, "", applyTheme)
 SK(card, "Border transparency", "card_stroke_trans", 0, 1, 0.05, "", applyTheme)
 Toggle(card, "Accent border", "card_stroke_accent", applyTheme)
 DK(card, "Header style", "card_header", {"Plain", "Accent text", "Accent bar", "Accent line"}, applyTheme)
-SK(card, "Title size", "card_title_size", 10, 18, 1, " px", applyTheme)
+SK(card, "Title size", "card_title_size", 0, 18, 1, " px", applyTheme)
 Toggle(card, "Title divider", "card_divider", applyTheme)
-SK(card, "Padding", "card_pad", 6, 20, 1, " px", applyTheme)
-SK(card, "Spacing between cards", "card_gap", 4, 20, 1, " px", applyTheme)
+SK(card, "Padding", "card_pad", 0, 20, 1, " px", applyTheme)
+SK(card, "Spacing between cards", "card_gap", 0, 20, 1, " px", applyTheme)
 Toggle(card, "Collapsible cards", "card_collapse", applyTheme, "Click a card title to collapse or expand it")
 Button(card, "Expand all cards", function()
     S.card_collapsed = {}
@@ -3266,21 +3243,21 @@ SK(card, "Border thickness", "ctl_stroke", 0, 3, 0.5, "", applyTheme)
 SK(card, "Border transparency", "ctl_stroke_trans", 0, 1, 0.05, "", applyTheme)
 Toggle(card, "Accent border", "ctl_stroke_accent", applyTheme)
 SK(card, "Transparency", "ctl_trans", 0, 1, 0.05, "", applyTheme)
-SK(card, "Text size", "ctl_text", 10, 15, 1, " px", applyTheme)
+SK(card, "Text size", "ctl_text", 0, 15, 1, " px", applyTheme)
 
 card = Card(PTH, "Switches", 1)
 DK(card, "Shape", "sw_shape", {"Pill", "Rounded", "Square"}, applyTheme)
-SK(card, "Width", "sw_w", 26, 44, 2, " px", applyTheme)
-SK(card, "Height", "sw_h", 12, 24, 2, " px", applyTheme)
-SK(card, "Knob size", "sw_knob", 8, 20, 2, " px", applyTheme)
+SK(card, "Width", "sw_w", 0, 44, 2, " px", applyTheme)
+SK(card, "Height", "sw_h", 0, 24, 2, " px", applyTheme)
+SK(card, "Knob size", "sw_knob", 0, 20, 2, " px", applyTheme)
 Toggle(card, "Follow accent color", "sw_accent", applyTheme, "The on color uses the accent color")
 ColorRow(card, "On color", "sw_on", applyTheme)
 ColorRow(card, "Knob color", "sw_knob_c", applyTheme)
 
 card = Card(PTH, "Sliders", 1)
 DK(card, "Shape", "sl_shape", {"Circle", "Square"}, applyTheme)
-SK(card, "Track thickness", "sl_h", 2, 10, 1, " px", applyTheme)
-SK(card, "Knob size", "sl_knob", 6, 16, 2, " px", applyTheme)
+SK(card, "Track thickness", "sl_h", 0, 10, 1, " px", applyTheme)
+SK(card, "Knob size", "sl_knob", 0, 16, 2, " px", applyTheme)
 Toggle(card, "Follow accent color", "sl_accent", applyTheme, "The filled part uses the accent color")
 ColorRow(card, "Fill color", "sl_fill", applyTheme)
 
@@ -3288,7 +3265,7 @@ card = Card(PTH, "Themes", 2)
 Manager(card, "theme")
 
 card = Card(PTH, "Close button", 2)
-SK(card, "Size", "cb_size", 20, 40, 2, " px", applyTheme)
+SK(card, "Size", "cb_size", 0, 40, 2, " px", applyTheme)
 SK(card, "Corner radius", "cb_corner", 0, 20, 1, " px", applyTheme)
 ColorRow(card, "Background", "cb_bg", applyTheme)
 ColorRow(card, "Icon", "cb_icon", applyTheme)
@@ -3297,20 +3274,15 @@ ColorRow(card, "Hover", "cb_hover", applyTheme)
 -- position / size / lock rows that every button of the main GUI has. k = the settings keys of that button
 local function HudCommon(parent, k, pct)
     Toggle(parent, "Lock position and size", k.lock, applyTheme, "A locked button can't be dragged or resized. Unlocked buttons show a corner handle")
-    SK(parent, "Size", k.size, 20, 220, 2, " px", applyTheme)
-    SK(parent, "Aspect (height / width)", k.ratio, 0.4, 2.5, 0.05, "", applyTheme)
+    SK(parent, "Size", k.size, 0, 220, 2, " px", applyTheme)
+    SK(parent, "Aspect (height / width)", k.ratio, 0, 2.5, 0.05, "", applyTheme)
     local m = pct and 1 or 100
-    local positionMin, positionMax = pct and 1 or 0.01, pct and 100 or 1
-    NUMERIC_BOUNDS[k.x] = {positionMin, positionMax}
-    NUMERIC_BOUNDS[k.y] = {positionMin, positionMax}
-    S[k.x] = clampFiniteNumber(S[k.x], positionMin, positionMax)
-    S[k.y] = clampFiniteNumber(S[k.y], positionMin, positionMax)
     Slider(parent, "Position X", function() return S[k.x] * m end, function(v)
-        S[k.x] = clampFiniteNumber(v / m, positionMin, positionMax)
+        S[k.x] = v / m
         applyTheme()
     end, 0, 100, 0.5, "%")
     Slider(parent, "Position Y", function() return S[k.y] * m end, function(v)
-        S[k.y] = clampFiniteNumber(v / m, positionMin, positionMax)
+        S[k.y] = v / m
         applyTheme()
     end, 0, 100, 0.5, "%")
 end
@@ -3329,7 +3301,7 @@ Toggle(card, "Show button", "ui_btn", applyTheme, "Floating button that opens an
 HudCommon(card, {lock = "fb_lock", size = "fb_size", ratio = "fb_ratio", x = "fb_x", y = "fb_y"}, false)
 DK(card, "Shape", "fb_shape", SHAPES, applyTheme)
 TextK(card, "Label", "fb_text", applyTheme, 3, "R")
-SK(card, "Text size", "fb_textsize", 10, 32, 1, " px", applyTheme)
+SK(card, "Text size", "fb_textsize", 0, 32, 1, " px", applyTheme)
 SK(card, "Transparency", "fb_trans", 0, 1, 0.05, "", applyTheme)
 SK(card, "Outline thickness", "fb_stroke", 0, 6, 0.5, "", applyTheme)
 Toggle(card, "Follow accent color", "fb_accent", applyTheme, "Text and outline use the accent color")
@@ -3341,7 +3313,7 @@ card = Card(PTH, "AIM button", 2)
 HudCommon(card, {lock = "ab_lock", size = "aim_btn_size", ratio = "ab_ratio", x = "aim_btn_x", y = "aim_btn_y"}, true)
 DK(card, "Shape", "ab_shape", SHAPES, applyTheme)
 TextK(card, "Label", "ab_text", applyTheme, 6, "AIM")
-SK(card, "Text size", "ab_textsize", 8, 30, 1, " px", applyTheme)
+SK(card, "Text size", "ab_textsize", 0, 30, 1, " px", applyTheme)
 SK(card, "Transparency", "ab_trans", 0, 1, 0.05, "", applyTheme)
 SK(card, "Outline thickness", "ab_stroke", 0, 6, 0.5, "", applyTheme)
 Toggle(card, "Follow accent color", "ab_accent", applyTheme, "Outline and active fill use the accent color")
@@ -3351,7 +3323,7 @@ ColorRow(card, "Outline color", "ab_strokec", applyTheme)
 
 card = Card(PTH, "Quick buttons", 2)
 DK(card, "Shape", "qb_shape", SHAPES, applyTheme)
-SK(card, "Text size", "qb_textsize", 8, 20, 1, " px", applyTheme)
+SK(card, "Text size", "qb_textsize", 0, 20, 1, " px", applyTheme)
 SK(card, "Transparency", "qb_trans", 0, 1, 0.02, "", applyTheme)
 SK(card, "Outline thickness", "qb_stroke", 0, 4, 0.5, "", applyTheme)
 Toggle(card, "Follow accent color", "qb_accent", applyTheme, "Outline and active fill use the accent color")
@@ -3371,7 +3343,7 @@ DK(card, "Marker", "tap_vis", {"Always", "While unlocked", "Hidden"}, applyTheme
 HudCommon(card, {lock = "tap_lock", size = "tap_size", ratio = "tap_ratio", x = "tap_x", y = "tap_y"}, false)
 DK(card, "Shape", "tap_shape", SHAPES, applyTheme)
 TextK(card, "Label", "tap_text", applyTheme, 6, "TAP")
-SK(card, "Text size", "tap_textsize", 8, 24, 1, " px", applyTheme)
+SK(card, "Text size", "tap_textsize", 0, 24, 1, " px", applyTheme)
 SK(card, "Fill transparency", "tap_trans", 0, 1, 0.05, "", applyTheme)
 SK(card, "Outline thickness", "tap_stroke", 0, 6, 0.5, "", applyTheme)
 Toggle(card, "Follow accent color", "tap_accent", applyTheme, "Fill and outline use the accent color")
@@ -3635,7 +3607,7 @@ local function hRollOffset()
     return Vector3.new((math.random() * 2 - 1) * r, (math.random() * 2 - 1) * r, (math.random() * 2 - 1) * r)
 end
 
--- alpha is framerate independent: 1 - s^(dt*60); the UI enforces a 1% minimum smoothing value
+-- smooth 0% => alpha 1 (instant). alpha is framerate independent: 1 - s^(dt*60)
 function aimUpdate(c, dt, org)
     if not aimOn() then
         hPart = nil
@@ -3861,7 +3833,7 @@ do
         for n = 1, count do
             local off = (n == 1) and Vector2.zero or ring[n - 1] * r
             local ray = c:ViewportPointToRay(org.X + off.X, org.Y + off.Y)
-            local hit, pl = castThrough(ray.Origin, ray.Direction * S.trigger_range, c)
+            local hit, pl = castThrough(ray.Origin, ray.Direction * math.max(S.trigger_range, 1), c)
             if hit and pl then
                 local ch = target(pl, "trig")
                 if ch then
@@ -4390,7 +4362,7 @@ local function drawPlayer(o, p, ch, hum, root, c, vp, dist, team)
         local l = o.name
         l.Text = nm
         l.TextColor3 = (S.name_color_mode == "Custom") and col(S.name_color) or color
-        l.TextSize = (S.name_size > 0) and S.name_size or S.esp_text
+        l.TextSize = math.max((S.name_size > 0) and S.name_size or S.esp_text, 1)
         l.Font = fontOf(S.name_font)
         l.TextStrokeTransparency = S.name_stroke
         l.Position = UDim2.fromOffset(x0 + w / 2, y0 - S.name_offset)
@@ -4406,7 +4378,7 @@ local function drawPlayer(o, p, ch, hum, root, c, vp, dist, team)
         local l = o.dist
         l.Text = txt
         l.TextColor3 = (S.dist_color_mode == "Custom") and col(S.dist_color) or color
-        l.TextSize = (S.dist_size > 0) and S.dist_size or S.esp_text
+        l.TextSize = math.max((S.dist_size > 0) and S.dist_size or S.esp_text, 1)
         l.Font = fontOf(S.dist_font)
         l.TextStrokeTransparency = S.dist_stroke
         l.Position = UDim2.fromOffset(x0 + w / 2, y1 + S.dist_offset)
@@ -4421,7 +4393,7 @@ local function drawPlayer(o, p, ch, hum, root, c, vp, dist, team)
         local real = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
         if S.hp_show_below >= 100 or real * 100 <= S.hp_show_below then
             hpVisible = true
-            -- smoothing: the drawn ratio follows the real one; the UI enforces a 1% minimum
+            -- smoothing: the drawn ratio follows the real one (0% = instantly)
             local ratio = real
             if S.hp_smooth > 0 and o.hpR then
                 ratio = o.hpR + (real - o.hpR) * (1 - (S.hp_smooth / 100) ^ (espDt * 60))
@@ -4511,7 +4483,7 @@ local function drawPlayer(o, p, ch, hum, root, c, vp, dist, team)
                 else
                     txt = string.format("%d", math.floor(hum.Health + 0.5))
                 end
-                local ts = S.hp_text_size
+                local ts = math.max(S.hp_text_size, 1)
                 tl.Text = txt
                 tl.TextSize = ts
                 tl.TextColor3 = S.hp_text_fill and fillC or col(S.hp_text_c)
@@ -4863,7 +4835,7 @@ local function thirdPerson(c)
     if not ch then return end
     local cf = c.CFrame
     local pos = (cf * CFrame.new(S.tp_side, S.tp_height, S.tp_dist)).Position
-    if S.tp_collide then
+    if S.tp_collide and (pos - cf.Position).Magnitude > 0.05 then   -- no ray when the camera is not pushed back
         tpParams.FilterDescendantsInstances = Vis.filter(c)
         local from = cf.Position
         local dir = pos - from
@@ -4923,7 +4895,8 @@ local function fovStep()
     if not cam then return end
     if S.camfov_on and not unloading then
         if not fovBase then fovBase = cam.FieldOfView end
-        if math.abs(cam.FieldOfView - S.camfov) > 0.01 then cam.FieldOfView = S.camfov end
+        local fov = math.max(S.camfov, 1)   -- Roblox does not accept a field of view of 0
+        if math.abs(cam.FieldOfView - fov) > 0.01 then cam.FieldOfView = fov end
     elseif fovBase then
         cam.FieldOfView = fovBase
         fovBase = nil
