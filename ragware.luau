@@ -3908,23 +3908,60 @@ do
     dir.Parent = Workspace
     local states, clock = {}, 0
 
+    -- R6 body part names -> their canonical mesh asset paths.
+    -- The forum fix (devforum.roblox.com/t/3642028) says: for R6, destroy all children then recreate a
+    -- fresh SpecialMesh from the known path; cloning the existing mesh and just clearing it leaves the
+    -- clone with the wrong shape because R6 uses file-based meshes that need the correct asset path.
+    local R6_MESHES = {
+        Head        = "rbxasset://fonts/head.mesh",
+        Torso       = "rbxasset://fonts/torso.mesh",
+        ["Left Arm"]  = "rbxasset://fonts/leftarm.mesh",
+        ["Right Arm"] = "rbxasset://fonts/rightarm.mesh",
+        ["Left Leg"]  = "rbxasset://fonts/leftleg.mesh",
+        ["Right Leg"] = "rbxasset://fonts/rightleg.mesh",
+    }
+
     local function clonePart(src)
         local c = src:Clone()
         if not c then return nil end
+        -- strip everything: joints, scripts, tags, highlight, movers, etc.
+        for _, d in ipairs(c:GetChildren()) do d:Destroy() end
         local meshed = false
-        for _, d in ipairs(c:GetChildren()) do
-            if d:IsA("SpecialMesh") or d:IsA("BlockMesh") or d:IsA("CylinderMesh") then
-                -- keeps the shape (R6 head, hats), removes the texture and shrinks it by 1%
-                if d:IsA("SpecialMesh") then d.TextureId = "" end
-                d.Scale = d.Scale * 0.99
+        if c:IsA("MeshPart") then
+            c.TextureID = ""
+            c.Size = c.Size * 0.99
+            meshed = true
+        else
+            local r6path = R6_MESHES[src.Name]
+            if r6path then
+                -- R6 body part: recreate a clean SpecialMesh with the correct mesh file.
+                -- This is the fix from the DevForum tutorial; copying the existing mesh leaves it broken.
+                local sm = Instance.new("SpecialMesh")
+                sm.MeshType = Enum.MeshType.FileMesh
+                sm.MeshId   = r6path
+                sm.TextureId = ""
+                sm.Scale    = Vector3.new(0.99, 0.99, 0.99)
+                sm.Parent   = c
                 meshed = true
             else
-                d:Destroy()
+                -- Accessory handle, hat, R15 part with a non-file mesh: clone the original mesh cleanly
+                local srcMesh = src:FindFirstChildWhichIsA("SpecialMesh")
+                             or src:FindFirstChildWhichIsA("BlockMesh")
+                             or src:FindFirstChildWhichIsA("CylinderMesh")
+                if srcMesh then
+                    local mc = srcMesh:Clone()
+                    mc:ClearAllChildren()
+                    if mc:IsA("SpecialMesh") then mc.TextureId = "" end
+                    mc.Scale = mc.Scale * 0.99
+                    mc.Parent = c
+                    meshed = true
+                end
             end
         end
-        if c:IsA("MeshPart") then c.TextureID = "" end
         if not meshed then c.Size = c.Size * 0.99 end
-        c.Anchored = false
+        -- anchor temporarily so the part sits at the right CFrame while the WeldConstraint is wired up
+        c.Anchored = true
+        c.CFrame = src.CFrame
         c.CanCollide = false
         c.CanQuery = false
         c.CanTouch = false
@@ -3941,11 +3978,14 @@ do
             if src.Transparency >= 0.95 or src.Name == "HumanoidRootPart" then return end
             local ok, c = pcall(clonePart, src)
             if not (ok and c) then return end
+            -- parent first so the engine knows which Workspace the weld lives in
             c.Parent = model
             local w = Instance.new("WeldConstraint")
             w.Part0 = c
             w.Part1 = src
             w.Parent = c
+            -- unanchor only after the weld is in place; otherwise the clone falls before it is attached
+            c.Anchored = false
         end
         for _, d in ipairs(ch:GetChildren()) do
             if d:IsA("BasePart") then
