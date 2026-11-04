@@ -235,6 +235,25 @@ local DEFAULTS = {
     ignore_teams_on = true, ignore_teams_esp = false, ignore_teams = {}, target_teams = {}, team_ignore_mine = true,
     -- teleport
     tele_offset = "Behind", tele_dist = 4,
+    -- cosmetics (client side). Color modes: Solid = color A, Gradient = A <-> B, Rainbow = the hue wheel
+    -- china hat
+    hat_on = false, hat_mode = "Rainbow", hat_col_a = {255, 38, 129}, hat_col_b = {38, 190, 255}, hat_sat = 0.85,
+    hat_speed = 0.25, hat_radius = 1.45, hat_height = 1.1, hat_lift = 0.12, hat_thick = 0.1, hat_trans = 0.5,
+    hat_glow = 1, hat_light = 0.5, hat_fill = true, hat_ring = true, hat_hide_fp = true,
+    hat_bloom = true, hat_bloom_int = 0.9, hat_bloom_size = 28, hat_bloom_thr = 0.8,
+    -- world color (lighting) and time of day
+    world_on = false, world_mode = "Solid", world_col_a = {255, 60, 140}, world_col_b = {60, 160, 255},
+    world_sat = 0.8, world_speed = 0.2, world_amt = 0.5,
+    world_amb = true, world_shift = true, world_fog = false, world_tint = true,
+    time_on = false, time_val = 12,
+    -- screen gradient, crosshair, watermark
+    grad_on = false, grad_mode = "Gradient", grad_col_a = {255, 38, 129}, grad_col_b = {38, 190, 255}, grad_sat = 0.85,
+    grad_angle = 90, grad_spin = 0, grad_speed = 0.2, grad_trans = 0.75, grad_fade = false,
+    xh_on = false, xh_mode = "Solid", xh_col_a = {255, 255, 255}, xh_col_b = {255, 38, 129}, xh_speed = 0.3,
+    xh_len = 8, xh_gap = 4, xh_thick = 2, xh_dot = false, xh_dot_size = 3, xh_outline = true, xh_spin = 0,
+    xh_follow = false, xh_trans = 0,
+    wm_on = false, wm_name = "RagWare", wm_pos = "Top center", wm_fps = true, wm_ping = true, wm_time = true,
+    wm_trans = 0.1,
     -- mobile quick buttons (which ones are shown; their look is in the theme) and the menu key
     qb_on = isMobile, qb_trig = true, qb_spin = true, qb_tp = true, qb_bhop = true,
     ui_key = "RightShift",
@@ -867,7 +886,7 @@ local function corner(o, delta)
     return c
 end
 
--- controls (buttons, dropdowns, inputs, keybinds): every one registers here, so Theme > Controls can restyle them all.
+-- controls (buttons, dropdowns, inputs, keybinds): every one registers here, so Config > Control style can restyle them all.
 -- flat = no border and no text size change (pills, lists)
 local ctlObjs = setmetatable({}, {__mode = "k"})   -- surface -> {corner, stroke, flat}
 
@@ -948,7 +967,7 @@ local function switch(parent, rightOff)
     local swc = new("UICorner", {}, sw)
     local knob = new("Frame", {AnchorPoint = Vector2.new(0, 0.5), BorderSizePixel = 0}, sw)
     local knc = new("UICorner", {}, knob)
-    -- size, shape and colors come from Theme > Switches (every switch is refreshed by applyTheme)
+    -- size, shape and colors come from Config > Switch style (every switch is refreshed by applyTheme)
     return function(on, instant)
         local w, h = math.max(S.sw_w, 10), math.max(S.sw_h, 6)   -- a switch never gets so small that it disappears
         local k = math.max(math.min(S.sw_knob, h), 2)
@@ -1010,7 +1029,7 @@ local function Feature(parent, label, key, o)
         sub = new("Frame", {Name = "Sub", Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
             BackgroundColor3 = "sub", BorderSizePixel = 0, Visible = false, LayoutOrder = 2}, holder)
         corner(sub, -4)
-        subObjs[#subObjs + 1] = sub   -- transparency of the settings panels (Theme > Cards)
+        subObjs[#subObjs + 1] = sub   -- transparency of the settings panels (Config > Card style)
         new("UIStroke", {Color = "line", Thickness = 1}, sub)
         new("UIPadding", {PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 6), PaddingLeft = UDim.new(0, 10),
             PaddingRight = UDim.new(0, 10)}, sub)
@@ -1060,7 +1079,7 @@ local function Slider(parent, label, get, set, mn, mx, step, suffix, desc)
     local knob = new("Frame", {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(1, 0.5),
         Size = UDim2.fromOffset(12, 12), BackgroundColor3 = "text", BorderSizePixel = 0}, fill)
     local knobC = new("UICorner", {}, knob)
-    -- track thickness, knob size, shape and fill color come from Theme > Sliders
+    -- track thickness, knob size, shape and fill color come from Config > Slider style
     onTheme(function()
         local r = (S.sl_shape == "Square") and UDim.new(0, 0) or UDim.new(1, 0)
         bar.Size = UDim2.new(1, 0, 0, S.sl_h)
@@ -1529,13 +1548,9 @@ local function icon(kind, parent, pos)
             Size = UDim2.fromOffset(14, 8), BackgroundTransparency = 1, BorderSizePixel = 0}, h)
         new("UICorner", {CornerRadius = UDim.new(0, 5)}, b)
         parts[#parts + 1] = {new("UIStroke", {Thickness = 2}, b), "Color"}
-    elseif kind == "Teleport" then    -- map pin
-        ring(10, 2, 9, 6)
-        bar(9, 13, 2, 5)
-        bar(9, 17, 10, 2, true)
-    elseif kind == "Theme" then       -- palette
-        ring(16, 2, 9, 9)
-        bar(6, 7, 3, 3, true); bar(11, 6, 3, 3, true); bar(12, 11, 3, 3, true)
+    elseif kind == "Cosmetic" then    -- sparkle
+        bar(9, 9, 2, 16, true); bar(9, 9, 16, 2, true)
+        bar(9, 9, 2, 10, true, 45); bar(9, 9, 2, 10, true, -45)
     else                              -- Config: gear
         ring(10, 2, 9, 9)
         bar(9, 2, 3, 4); bar(9, 16, 3, 4); bar(2, 9, 4, 3); bar(16, 9, 4, 3)
@@ -1678,7 +1693,7 @@ panelObjs[#panelObjs + 1] = {sideFill, 1}
 
 local logo = text(side, "", {Position = UDim2.fromOffset(18, 13), Size = UDim2.new(1, -24, 0, 24), TextSize = 20,
     Font = Enum.Font.GothamBold, RichText = true})
-text(side, "v4.0", {Position = UDim2.fromOffset(19, 36), Size = UDim2.new(1, -24, 0, 14), TextSize = 11,
+text(side, "v4.1", {Position = UDim2.fromOffset(19, 36), Size = UDim2.new(1, -24, 0, 14), TextSize = 11,
     TextColor3 = "dim"})
 local tabs = new("Frame", {Name = "Tabs", Position = UDim2.fromOffset(8, 64), Size = UDim2.new(1, -16, 1, -120),
     BackgroundTransparency = 1}, side)
@@ -1753,7 +1768,7 @@ if not isMobile then
 end
 
 -- pages and tabs (the tab order is changed here)
-local TAB_ORDER = {"Combat", "Visual", "Player", "Teleport", "Theme", "Config"}
+local TAB_ORDER = {"Combat", "Visual", "Player", "Cosmetic", "Config"}
 pages = {}
 local tabBtns = {}
 local compact = false
@@ -1887,7 +1902,7 @@ local function setColumns(w, force)
     end
 end
 
--- how the cards look (Theme > Cards): transparency, corners, border, header style, padding, spacing, collapsed state
+-- how the cards look (Config > Card style): transparency, corners, border, header style, padding, spacing, collapsed state
 local lastGap = S.card_gap
 onTheme(function()
     local a = accent()
@@ -1956,7 +1971,7 @@ end
 
 conn(gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() layout() end))
 
--- resize grip: the corner is chosen in Theme > Window
+-- resize grip: the corner is chosen in Config > Window style
 local grip = new("Frame", {Name = "Grip", BackgroundTransparency = 1, Active = true, ZIndex = 20}, win)
 local gripLines = {}
 for i = 1, 3 do
@@ -2097,7 +2112,7 @@ conn(UIS.InputEnded:Connect(function(i)
         drag = nil
         if d.onEnd then pcall(d.onEnd, d.moved) end
         if not d.moved and d.onTap then d.onTap() end
-        -- the typed boxes of the Theme tab show the new position / size
+        -- the typed boxes of the Config tab show the new position / size
         if d.moved and (d.kind == "hud" or d.kind == "hudsize") then refreshAll() end
     end
 end))
@@ -2106,7 +2121,7 @@ end))
 -- HUD buttons: every button of the main GUI (open / close, AIM, quick buttons, tap point).
 -- An unlocked button can be dragged (a tap still does its action) and resized with the corner handle that shows
 -- up on it. Locked buttons (each one, or all of them) only do their action.
--- Look, size, position and lock are theme settings (Theme tab).
+-- Look, size, position and lock are theme settings (Config tab).
 ----------------------------------------------------------------------------
 local function shapeRadius(shape, size)
     if shape == "Circle" then return UDim.new(1, 0) end
@@ -2721,7 +2736,7 @@ DK(sb, "Tap method", "tap_method", {"Auto", "Touch", "Mouse"}, nil,
     "Touch sends a real touch at the tap point, Mouse sends a click there. Auto tries touch first")
 SK(sb, "Tap hold", "tap_hold", 0, 300, 5, " ms", nil, "How long each tap is held down")
 SK(sb, "Tap spread", "tap_jitter", 0, 30, 1, " px", nil, "Random offset around the tap point")
-Toggle(sb, "Lock tap point", "tap_lock", applyTheme, "Drag the marker onto the game's fire button, then lock it. Look and size: Theme > Tap point")
+Toggle(sb, "Lock tap point", "tap_lock", applyTheme, "Drag the marker onto the game's fire button, then lock it. Look and size: Config > Tap point")
 trigStatus = StatusRow(sb, "Status")
 Button(sb, "Test fire in 3 s", function()
     TR.note = "testing in 3 s..."
@@ -3025,8 +3040,7 @@ Button(card, "Reset character", function()
     if hum then hum.Health = 0 end
 end)
 
--- Teleport ----------------------------------------------------------------
-local PTP = pages.Teleport
+-- Teleport (these cards are part of the Player tab) -------------------------
 
 -- waypoints are saved per game, so every map keeps its own list
 local WP = {list = {}, path = ST.root .. "/waypoints_" .. tostring(game.PlaceId) .. ".json"}
@@ -3072,7 +3086,7 @@ local function say(m)
 end
 
 local wpRebuild
-card = Card(PTP, "Waypoints", 1)
+card = Card(PP, "Waypoints", 1)
 local wpName = Input(card, "Name", "", "waypoint name")
 Button(card, "Set waypoint at my position", function()
     local root = myRoot()
@@ -3163,7 +3177,7 @@ function wpRebuild()
 end
 wpRebuild()
 
-card = Card(PTP, "Teleport to player", 2)
+card = Card(PP, "Teleport to player", 2)
 DK(card, "Position", "tele_offset", {"Behind", "In front", "Above", "On target"}, nil, "Where you land relative to the player")
 SK(card, "Distance", "tele_dist", 0, 20, 1, " st")
 
@@ -3191,17 +3205,158 @@ PlayerList(card, {
      click = function(e) tpToPlayer(e.id, e.display) end},
 }, false)
 
--- Theme -------------------------------------------------------------------
-local PTH = pages.Theme
+-- Cosmetic ----------------------------------------------------------------
+local PCO = pages.Cosmetic
 
-card = Card(PTH, "Colors", 1)
+local FX_MODES = {"Solid", "Gradient", "Rainbow"}
+local function hueRGB(h, s) return TC.rgb(Color3.fromHSV(h % 1, s, 1)) end
+
+-- china hat presets. Colors come from a hue (0 to 1) and a saturation. A preset only sets what it lists
+local HAT_PRESETS = {
+    {"HvH",       {hat_mode = "Rainbow", hat_sat = 0.85, hat_speed = 0.25, hat_trans = 0.5}},
+    {"Synthwave", {hat_mode = "Gradient", hat_col_a = hueRGB(0.88, 0.9), hat_col_b = hueRGB(0.52, 0.9), hat_speed = 0.12}},
+    {"Sakura",    {hat_mode = "Solid", hat_col_a = hueRGB(0.95, 0.4)}},
+    {"Dragon",    {hat_mode = "Gradient", hat_col_a = hueRGB(0, 1), hat_col_b = hueRGB(0.13, 1), hat_speed = 0.18}},
+    {"Ice",       {hat_mode = "Gradient", hat_col_a = hueRGB(0.5, 0.35), hat_col_b = hueRGB(0.62, 0.35), hat_speed = 0.1}},
+    {"Toxic",     {hat_mode = "Gradient", hat_col_a = hueRGB(0.33, 1), hat_col_b = hueRGB(0.16, 1), hat_speed = 0.2}},
+}
+local HAT_NAMES = {}
+for i, p in ipairs(HAT_PRESETS) do HAT_NAMES[i] = p[1] end
+
+card = Card(PCO, "China hat", 1)
+sb = Feature(card, "China hat", "hat_on", {desc = "A neon cone on your head. Only you can see it"})
+Dropdown(sb, "Preset", function() return "Choose..." end, function(name)
+    for _, p in ipairs(HAT_PRESETS) do
+        if p[1] == name then
+            for k, v in pairs(p[2]) do S[k] = copy(v) end
+        end
+    end
+    refreshAll()
+end, HAT_NAMES, "Loads a look. You can still change everything after")
+Heading(sb, "Color")
+DK(sb, "Mode", "hat_mode", FX_MODES, nil, "Solid = color A. Gradient = A and B blending around the cone. Rainbow = the hue wheel")
+ColorRow(sb, "Color A", "hat_col_a")
+ColorRow(sb, "Color B", "hat_col_b", nil, "Used by Gradient")
+SK(sb, "Saturation", "hat_sat", 0, 1, 0.05, "", nil, "Used by Rainbow")
+SK(sb, "Speed", "hat_speed", 0, 1.5, 0.05, "", nil, "How fast the colors turn. 0 = still")
+Heading(sb, "Shape")
+SK(sb, "Size", "hat_radius", 0, 3, 0.05, "")
+SK(sb, "Height", "hat_height", 0, 3, 0.05, "")
+SK(sb, "Elevation", "hat_lift", -0.5, 1.5, 0.05, "", nil, "Distance above the head")
+SK(sb, "Outline thickness", "hat_thick", 0, 0.4, 0.01, "", nil, "The glowing ring on the base")
+Heading(sb, "Look")
+SK(sb, "Transparency", "hat_trans", 0, 0.95, 0.05, "")
+SK(sb, "Neon glow", "hat_glow", 0, 1, 0.05, "")
+SK(sb, "Light around", "hat_light", 0, 1, 0.05, "", nil, "A light that makes the hat shine on what is near it")
+Toggle(sb, "Cone fill", "hat_fill")
+Toggle(sb, "Base outline", "hat_ring")
+Toggle(sb, "Hide in first person", "hat_hide_fp")
+Button(sb, "Randomize colors", function()
+    local a, s = math.random(), 0.6 + math.random() * 0.4
+    S.hat_mode = "Gradient"
+    S.hat_col_a = hueRGB(a, s)
+    S.hat_col_b = hueRGB(a + 0.2 + math.random() * 0.5, s)
+    refreshAll()
+end)
+ConfirmButton(sb, "Reset hat settings", function()
+    for k, v in pairs(DEFAULTS) do
+        if k:sub(1, 4) == "hat_" and k ~= "hat_on" then S[k] = copy(v) end
+    end
+    refreshAll()
+end)
+sb = Feature(card, "Hat bloom", "hat_bloom", {desc = "Soft glow over the whole screen, so the neon shines in games without bloom. Only while the hat is on"})
+SK(sb, "Intensity", "hat_bloom_int", 0, 3, 0.05, "")
+SK(sb, "Size", "hat_bloom_size", 0, 56, 1, "")
+SK(sb, "Threshold", "hat_bloom_thr", 0, 2, 0.05, "", nil, "Lower = more things glow")
+
+card = Card(PCO, "Crosshair", 1)
+sb = Feature(card, "Custom crosshair", "xh_on", {desc = "Draws a crosshair in the middle of the screen"})
+DK(sb, "Color", "xh_mode", FX_MODES, nil, "Solid = color A. Gradient = A and B blending. Rainbow = the hue wheel")
+ColorRow(sb, "Color A", "xh_col_a")
+ColorRow(sb, "Color B", "xh_col_b", nil, "Used by Gradient")
+SK(sb, "Speed", "xh_speed", 0, 1.5, 0.05, "", nil, "How fast the colors change. 0 = still")
+SK(sb, "Length", "xh_len", 0, 40, 1, " px")
+SK(sb, "Gap", "xh_gap", 0, 30, 1, " px")
+SK(sb, "Thickness", "xh_thick", 0, 8, 1, " px")
+SK(sb, "Transparency", "xh_trans", 0, 1, 0.05, "")
+Toggle(sb, "Outline", "xh_outline")
+Toggle(sb, "Center dot", "xh_dot")
+SK(sb, "Dot size", "xh_dot_size", 0, 12, 1, " px")
+SK(sb, "Spin", "xh_spin", 0, 720, 10, " deg/s", nil, "Turns the crosshair around. 0 = still")
+Toggle(sb, "Follow the mouse", "xh_follow", nil, "Needs a mouse. Off = the middle of the screen")
+
+card = Card(PCO, "Lighting", 2)
+sb = Feature(card, "World color", "world_on", {desc = "Tints the lighting of the map. Only you see it"})
+DK(sb, "Mode", "world_mode", FX_MODES, nil, "Solid = color A. Gradient = A and B fading back and forth. Rainbow = the hue wheel")
+ColorRow(sb, "Color A", "world_col_a")
+ColorRow(sb, "Color B", "world_col_b", nil, "Used by Gradient")
+SK(sb, "Saturation", "world_sat", 0, 1, 0.05, "", nil, "Used by Rainbow")
+SK(sb, "Speed", "world_speed", 0, 1.5, 0.05, "", nil, "How fast Gradient and Rainbow change. 0 = still")
+SK(sb, "Strength", "world_amt", 0, 1, 0.05, "", nil, "0 = the lighting the game has, 1 = fully the color")
+MultiSelect(sb, "Affects", {{"world_amb", "Ambient"}, {"world_shift", "Color shift"}, {"world_fog", "Fog color"},
+    {"world_tint", "Screen tint"}},
+    "Ambient = shadows and indirect light. Color shift = lit surfaces. Fog = the haze in the distance. Screen tint = a filter over the whole picture")
+sb = Feature(card, "Time of day", "time_on", {desc = "Locks the game clock to an hour"})
+SK(sb, "Hour", "time_val", 0, 24, 0.25, "", nil, "0 = midnight, 12 = noon")
+
+card = Card(PCO, "Gradient", 2)
+sb = Feature(card, "Screen gradient", "grad_on", {desc = "A color gradient over the whole screen. The menu stays clean"})
+DK(sb, "Mode", "grad_mode", {"Gradient", "Rainbow"}, nil, "Gradient = color A to color B. Rainbow = the hue wheel")
+ColorRow(sb, "Color A", "grad_col_a")
+ColorRow(sb, "Color B", "grad_col_b", nil, "Used by Gradient")
+SK(sb, "Saturation", "grad_sat", 0, 1, 0.05, "", nil, "Used by Rainbow")
+SK(sb, "Speed", "grad_speed", 0, 1.5, 0.05, "", nil, "How fast the Rainbow scrolls. 0 = still")
+SK(sb, "Angle", "grad_angle", 0, 360, 5, " deg")
+SK(sb, "Spin", "grad_spin", 0, 180, 5, " deg/s", nil, "Turns the gradient around. 0 = still")
+SK(sb, "Transparency", "grad_trans", 0, 1, 0.02, "")
+Toggle(sb, "Fade out", "grad_fade", nil, "The far end of the gradient fades to clear")
+
+card = Card(PCO, "Watermark", 2)
+sb = Feature(card, "Watermark", "wm_on", {desc = "Name, FPS, ping and the time in a corner of the screen"})
+TextK(sb, "Name", "wm_name", nil, 20, "RagWare")
+DK(sb, "Position", "wm_pos", {"Top left", "Top center", "Top right", "Bottom left", "Bottom right"})
+Toggle(sb, "FPS", "wm_fps")
+Toggle(sb, "Ping", "wm_ping")
+Toggle(sb, "Time", "wm_time")
+SK(sb, "Transparency", "wm_trans", 0, 1, 0.05, "")
+
+-- Config ------------------------------------------------------------------
+-- (the old Theme tab lives here too: the style cards come after the managers)
+local PF = pages.Config
+
+card = Card(PF, "Configs", 1)
+Manager(card, "config")
+
+card = Card(PF, "Themes", 2)
+Manager(card, "theme")
+
+card = Card(PF, "Menu", 1)
+Keybind(card, "Menu key", "ui_key")
+
+card = Card(PF, "Mobile", 2)
+Feature(card, "AIM button", "aim_button", {sub = false, desc = "Hold to aim when there is no mouse (look, size, position and lock: AIM button card)"})
+sb = Feature(card, "Quick buttons", "qb_on", {cb = updateQuick, desc = "Floating toggles you can drag anywhere (look, size, position and lock of each one: Quick buttons card)"})
+Toggle(sb, "Triggerbot", "qb_trig", updateQuick)
+Toggle(sb, "Spinbot", "qb_spin", updateQuick)
+Toggle(sb, "Third person", "qb_tp", updateQuick)
+Toggle(sb, "Bunny hop", "qb_bhop", updateQuick)
+Toggle(card, "Lock all buttons", "hud_lock_all", applyTheme, "Every button on the screen stops being draggable and resizable")
+
+card = Card(PF, "Script", 2)
+Button(card, "Unload", function()
+    if ENV.__RAGWARE_UNLOAD then ENV.__RAGWARE_UNLOAD() end
+end)
+
+-- Theme: the look of the menu and of the buttons on the screen ---------------
+
+card = Card(PF, "Theme colors", 1)
 for _, c in ipairs({{"Accent", "ui_accent"}, {"Background", "ui_bg"}, {"Sidebar", "ui_side"}, {"Cards", "ui_card"},
     {"Panels", "ui_sub"}, {"Controls", "ui_item"}, {"Borders", "ui_line"}, {"Switch off", "ui_off"},
     {"Text", "ui_text"}, {"Dim text", "ui_dim"}}) do
     ColorRow(card, c[1], c[2], applyTheme)
 end
 
-card = Card(PTH, "Window", 1)
+card = Card(PF, "Window style", 1)
 SK(card, "Window transparency", "ui_trans", 0, 0.8, 0.02, "", applyTheme)
 SK(card, "Scale", "ui_scale", 0, 1.6, 0.05, "x", layout)
 SK(card, "Corner radius", "ui_corner", 0, 16, 1, " px", applyTheme)
@@ -3219,7 +3374,7 @@ Button(card, "Reset window size and position", function()
     layout()
 end)
 
-card = Card(PTH, "Cards", 1)
+card = Card(PF, "Card style", 1)
 SK(card, "Card transparency", "card_trans", 0, 1, 0.02, "", applyTheme)
 SK(card, "Panel transparency", "sub_trans", 0, 1, 0.02, "", applyTheme, "The settings panels that open under a feature")
 SK(card, "Corner radius", "card_corner", 0, 16, 1, " px", applyTheme)
@@ -3237,7 +3392,7 @@ Button(card, "Expand all cards", function()
     applyTheme()
 end)
 
-card = Card(PTH, "Controls", 1)
+card = Card(PF, "Control style", 1)
 SK(card, "Corner radius", "ctl_corner", 0, 12, 1, " px", applyTheme, "Buttons, dropdowns, inputs and keybinds")
 SK(card, "Border thickness", "ctl_stroke", 0, 3, 0.5, "", applyTheme)
 SK(card, "Border transparency", "ctl_stroke_trans", 0, 1, 0.05, "", applyTheme)
@@ -3245,7 +3400,7 @@ Toggle(card, "Accent border", "ctl_stroke_accent", applyTheme)
 SK(card, "Transparency", "ctl_trans", 0, 1, 0.05, "", applyTheme)
 SK(card, "Text size", "ctl_text", 0, 15, 1, " px", applyTheme)
 
-card = Card(PTH, "Switches", 1)
+card = Card(PF, "Switch style", 1)
 DK(card, "Shape", "sw_shape", {"Pill", "Rounded", "Square"}, applyTheme)
 SK(card, "Width", "sw_w", 0, 44, 2, " px", applyTheme)
 SK(card, "Height", "sw_h", 0, 24, 2, " px", applyTheme)
@@ -3254,17 +3409,14 @@ Toggle(card, "Follow accent color", "sw_accent", applyTheme, "The on color uses 
 ColorRow(card, "On color", "sw_on", applyTheme)
 ColorRow(card, "Knob color", "sw_knob_c", applyTheme)
 
-card = Card(PTH, "Sliders", 1)
+card = Card(PF, "Slider style", 1)
 DK(card, "Shape", "sl_shape", {"Circle", "Square"}, applyTheme)
 SK(card, "Track thickness", "sl_h", 0, 10, 1, " px", applyTheme)
 SK(card, "Knob size", "sl_knob", 0, 16, 2, " px", applyTheme)
 Toggle(card, "Follow accent color", "sl_accent", applyTheme, "The filled part uses the accent color")
 ColorRow(card, "Fill color", "sl_fill", applyTheme)
 
-card = Card(PTH, "Themes", 2)
-Manager(card, "theme")
-
-card = Card(PTH, "Close button", 2)
+card = Card(PF, "Close button", 1)
 SK(card, "Size", "cb_size", 0, 40, 2, " px", applyTheme)
 SK(card, "Corner radius", "cb_corner", 0, 20, 1, " px", applyTheme)
 ColorRow(card, "Background", "cb_bg", applyTheme)
@@ -3287,7 +3439,7 @@ local function HudCommon(parent, k, pct)
     end, 0, 100, 0.5, "%")
 end
 
-card = Card(PTH, "HUD buttons", 2)
+card = Card(PF, "HUD buttons", 2)
 Toggle(card, "Lock all buttons", "hud_lock_all", applyTheme, "Locked buttons only do their action: no dragging, no resizing")
 Toggle(card, "Show every button", "hud_preview", applyTheme, "Shows the buttons that are normally hidden, so you can place them. Not saved")
 ConfirmButton(card, "Reset positions and sizes", function()
@@ -3296,7 +3448,7 @@ ConfirmButton(card, "Reset positions and sizes", function()
     layout()
 end)
 
-card = Card(PTH, "Open / close button", 2)
+card = Card(PF, "Open / close button", 2)
 Toggle(card, "Show button", "ui_btn", applyTheme, "Floating button that opens and closes the menu")
 HudCommon(card, {lock = "fb_lock", size = "fb_size", ratio = "fb_ratio", x = "fb_x", y = "fb_y"}, false)
 DK(card, "Shape", "fb_shape", SHAPES, applyTheme)
@@ -3309,7 +3461,7 @@ ColorRow(card, "Background", "fb_bg", applyTheme)
 ColorRow(card, "Text color", "fb_textc", applyTheme)
 ColorRow(card, "Outline color", "fb_strokec", applyTheme)
 
-card = Card(PTH, "AIM button", 2)
+card = Card(PF, "AIM button", 2)
 HudCommon(card, {lock = "ab_lock", size = "aim_btn_size", ratio = "ab_ratio", x = "aim_btn_x", y = "aim_btn_y"}, true)
 DK(card, "Shape", "ab_shape", SHAPES, applyTheme)
 TextK(card, "Label", "ab_text", applyTheme, 6, "AIM")
@@ -3321,7 +3473,7 @@ ColorRow(card, "Background", "ab_bg", applyTheme)
 ColorRow(card, "Text color", "ab_textc", applyTheme)
 ColorRow(card, "Outline color", "ab_strokec", applyTheme)
 
-card = Card(PTH, "Quick buttons", 2)
+card = Card(PF, "Quick buttons", 2)
 DK(card, "Shape", "qb_shape", SHAPES, applyTheme)
 SK(card, "Text size", "qb_textsize", 0, 20, 1, " px", applyTheme)
 SK(card, "Transparency", "qb_trans", 0, 1, 0.02, "", applyTheme)
@@ -3337,7 +3489,7 @@ for _, q in ipairs(QUICK) do
     HudCommon(sb, {lock = pre .. "lock", size = pre .. "size", ratio = pre .. "ratio", x = pre .. "x", y = pre .. "y"}, false)
 end
 
-card = Card(PTH, "Tap point", 2)
+card = Card(PF, "Tap point", 2)
 DK(card, "Marker", "tap_vis", {"Always", "While unlocked", "Hidden"}, applyTheme,
     "Shown while the triggerbot fire method is Screen tap. The tap lands on the center of the marker")
 HudCommon(card, {lock = "tap_lock", size = "tap_size", ratio = "tap_ratio", x = "tap_x", y = "tap_y"}, false)
@@ -3351,28 +3503,6 @@ ColorRow(card, "Fill color", "tap_fill", applyTheme)
 ColorRow(card, "Outline color", "tap_strokec", applyTheme)
 ColorRow(card, "Text color", "tap_textc", applyTheme)
 
--- Config ------------------------------------------------------------------
-local PF = pages.Config
-
-card = Card(PF, "Configs", 1)
-Manager(card, "config")
-
-card = Card(PF, "Menu", 1)
-Keybind(card, "Menu key", "ui_key")
-
-card = Card(PF, "Mobile", 2)
-Feature(card, "AIM button", "aim_button", {sub = false, desc = "Hold to aim when there is no mouse (look, size, position and lock: Theme tab)"})
-sb = Feature(card, "Quick buttons", "qb_on", {cb = updateQuick, desc = "Floating toggles you can drag anywhere (look, size, position and lock of each one: Theme tab)"})
-Toggle(sb, "Triggerbot", "qb_trig", updateQuick)
-Toggle(sb, "Spinbot", "qb_spin", updateQuick)
-Toggle(sb, "Third person", "qb_tp", updateQuick)
-Toggle(sb, "Bunny hop", "qb_bhop", updateQuick)
-Toggle(card, "Lock all buttons", "hud_lock_all", applyTheme, "Every button on the screen stops being draggable and resizable")
-
-card = Card(PF, "Script", 2)
-Button(card, "Unload", function()
-    if ENV.__RAGWARE_UNLOAD then ENV.__RAGWARE_UNLOAD() end
-end)
 end   -- end of the pages block
 Loader.mark("Loading combat modules")
 ----------------------------------------------------------------------------
@@ -3664,7 +3794,7 @@ do
         return ch and ch:FindFirstChildOfClass("Tool")
     end
 
-    -- Screen tap: touches (or clicks) the point set with the tap marker (Theme > Tap point). Made for devices without a
+    -- Screen tap: touches (or clicks) the point set with the tap marker (Config > Tap point). Made for devices without a
     -- mouse: put the marker on the game's fire button and the triggerbot taps it. The same x / y is used for the
     -- press and the release.
     local tapId, tapX, tapY = 3, 0, 0
@@ -3908,58 +4038,73 @@ do
     dir.Parent = Workspace
     local states, clock = {}, 0
 
-    -- R6 body part names -> their canonical mesh asset paths.
-    -- The forum fix (devforum.roblox.com/t/3642028) says: for R6, destroy all children then recreate a
-    -- fresh SpecialMesh from the known path; cloning the existing mesh and just clearing it leaves the
-    -- clone with the wrong shape because R6 uses file-based meshes that need the correct asset path.
+    -- The clone has to have EXACTLY the shape of the real body part. When it does not (a plain box where the real
+    -- body has a mesh), the clone sticks out of the body and shows up as a box on top of it. So every kind of body part
+    -- gets its shape from where that shape really comes from:
+    --   1) MeshPart (R15)                      -> clone it, no texture
+    --   2) the part's own mesh (R6 custom head, hat / accessory handles) -> copy that mesh exactly, no texture
+    --   3) R6 body part drawn by a CharacterMesh of the character (avatar packages / bundles) -> that mesh id
+    --   4) default R6 body part                -> the classic mesh from the DevForum fix (rbxasset://fonts/<name>.mesh)
+    --   5) anything else (custom rigs)         -> a plain block of the same size
     local R6_MESHES = {
-        Head        = "rbxasset://fonts/head.mesh",
-        Torso       = "rbxasset://fonts/torso.mesh",
+        Head          = "rbxasset://fonts/head.mesh",
+        Torso         = "rbxasset://fonts/torso.mesh",
         ["Left Arm"]  = "rbxasset://fonts/leftarm.mesh",
         ["Right Arm"] = "rbxasset://fonts/rightarm.mesh",
         ["Left Leg"]  = "rbxasset://fonts/leftleg.mesh",
         ["Right Leg"] = "rbxasset://fonts/rightleg.mesh",
     }
+    local BODYPART = {
+        Head = Enum.BodyPart.Head, Torso = Enum.BodyPart.Torso,
+        ["Left Arm"] = Enum.BodyPart.LeftArm, ["Right Arm"] = Enum.BodyPart.RightArm,
+        ["Left Leg"] = Enum.BodyPart.LeftLeg, ["Right Leg"] = Enum.BodyPart.RightLeg,
+    }
 
-    local function clonePart(src)
+    local function characterMeshFor(ch, partName)
+        local bp = BODYPART[partName]
+        if not bp then return nil end
+        for _, d in ipairs(ch:GetChildren()) do
+            if d:IsA("CharacterMesh") and d.BodyPart == bp and d.MeshId ~= 0 then return d end
+        end
+        return nil
+    end
+
+    local function clonePart(src, ch)
         local c = src:Clone()
         if not c then return nil end
-        -- strip everything: joints, scripts, tags, highlight, movers, etc.
-        for _, d in ipairs(c:GetChildren()) do d:Destroy() end
+        for _, d in ipairs(c:GetChildren()) do d:Destroy() end   -- joints, decals, scripts, tags
         local meshed = false
         if c:IsA("MeshPart") then
             c.TextureID = ""
             c.Size = c.Size * 0.99
             meshed = true
         else
-            local r6path = R6_MESHES[src.Name]
-            if r6path then
-                -- R6 body part: recreate a clean SpecialMesh with the correct mesh file.
-                -- This is the fix from the DevForum tutorial; copying the existing mesh leaves it broken.
-                local sm = Instance.new("SpecialMesh")
-                sm.MeshType = Enum.MeshType.FileMesh
-                sm.MeshId   = r6path
-                sm.TextureId = ""
-                sm.Scale    = Vector3.new(0.99, 0.99, 0.99)
-                sm.Parent   = c
+            local own = src:FindFirstChildWhichIsA("SpecialMesh")
+                or src:FindFirstChildWhichIsA("BlockMesh")
+                or src:FindFirstChildWhichIsA("CylinderMesh")
+            if own then
+                local mc = own:Clone()
+                mc:ClearAllChildren()
+                if mc:IsA("SpecialMesh") then mc.TextureId = "" end
+                mc.Scale = mc.Scale * 0.99
+                mc.Parent = c
                 meshed = true
             else
-                -- Accessory handle, hat, R15 part with a non-file mesh: clone the original mesh cleanly
-                local srcMesh = src:FindFirstChildWhichIsA("SpecialMesh")
-                             or src:FindFirstChildWhichIsA("BlockMesh")
-                             or src:FindFirstChildWhichIsA("CylinderMesh")
-                if srcMesh then
-                    local mc = srcMesh:Clone()
-                    mc:ClearAllChildren()
-                    if mc:IsA("SpecialMesh") then mc.TextureId = "" end
-                    mc.Scale = mc.Scale * 0.99
-                    mc.Parent = c
+                local cm = characterMeshFor(ch, src.Name)
+                local meshId = cm and ("rbxassetid://" .. tostring(cm.MeshId)) or R6_MESHES[src.Name]
+                if meshId then
+                    local sm = Instance.new("SpecialMesh")
+                    sm.MeshType = Enum.MeshType.FileMesh
+                    sm.MeshId = meshId
+                    sm.TextureId = ""
+                    sm.Scale = Vector3.new(0.99, 0.99, 0.99)
+                    sm.Parent = c
                     meshed = true
                 end
             end
         end
         if not meshed then c.Size = c.Size * 0.99 end
-        -- anchor temporarily so the part sits at the right CFrame while the WeldConstraint is wired up
+        -- anchored until the weld is wired up, so the clone sits exactly on the real part
         c.Anchored = true
         c.CFrame = src.CFrame
         c.CanCollide = false
@@ -3976,15 +4121,13 @@ do
         model.Parent = dir
         local function add(src)
             if src.Transparency >= 0.95 or src.Name == "HumanoidRootPart" then return end
-            local ok, c = pcall(clonePart, src)
+            local ok, c = pcall(clonePart, src, ch)
             if not (ok and c) then return end
-            -- parent first so the engine knows which Workspace the weld lives in
             c.Parent = model
             local w = Instance.new("WeldConstraint")
             w.Part0 = c
             w.Part1 = src
             w.Parent = c
-            -- unanchor only after the weld is in place; otherwise the clone falls before it is attached
             c.Anchored = false
         end
         for _, d in ipairs(ch:GetChildren()) do
@@ -3998,11 +4141,11 @@ do
         return model
     end
 
-    -- rig signature: how many parts / accessories (when it changes the clones are rebuilt)
+    -- rig signature: how many parts / accessories / character meshes (when it changes the clones are rebuilt)
     local function sig(ch)
         local n = 0
         for _, d in ipairs(ch:GetChildren()) do
-            if d:IsA("BasePart") or d:IsA("Accessory") then n = n + 1 end
+            if d:IsA("BasePart") or d:IsA("Accessory") or d:IsA("CharacterMesh") then n = n + 1 end
         end
         return n
     end
@@ -4857,6 +5000,715 @@ local function noclipStep()
         if d:IsA("BasePart") and d.CanCollide then d.CanCollide = false end
     end
 end
+Loader.mark("Loading cosmetics")
+----------------------------------------------------------------------------
+-- cosmetics logic: china hat, world color, time of day, screen gradient, crosshair, watermark.
+-- Everything here is client side (only you see it). Every setting is read from S, so the menu, the configs and the
+-- presets only have to change S: the step below notices the change and applies it. Whatever is turned off is removed
+-- again, and the lighting goes back to what the game had.
+----------------------------------------------------------------------------
+local cosStep, cosClear
+do
+local Lighting = game:GetService("Lighting")
+local Stats = game:GetService("Stats")
+
+local clock = 0
+
+-- one color system for all of it. Solid = color A, Gradient = A <-> B, Rainbow = the hue wheel.
+-- u (0-1) = place along the object (around the hat...), phase = the animation (time * speed)
+local function paint(mode, a, b, sat, phase, u)
+    if mode == "Rainbow" then return Color3.fromHSV((phase + u) % 1, math.clamp(sat, 0, 1), 1) end
+    if mode == "Gradient" then return a:Lerp(b, 0.5 + 0.5 * math.cos((u + phase) * math.pi * 2)) end
+    return a
+end
+
+-- true when one of these settings is not what the cache saw last time. Colors are replaced, never edited in place,
+-- so a different table means a different color
+local function changed(cache, keys)
+    local dirty = false
+    for _, k in ipairs(keys) do
+        if S[k] ~= cache[k] then
+            cache[k] = S[k]
+            dirty = true
+        end
+    end
+    return dirty
+end
+
+-- the settings each part watches, and what each part applied last
+local KEYS = {
+    hatShape = {"hat_radius", "hat_height", "hat_lift", "hat_thick"},
+    hatStyle = {"hat_trans", "hat_glow", "hat_light", "hat_fill", "hat_ring"},
+    hatColor = {"hat_mode", "hat_col_a", "hat_col_b", "hat_sat", "hat_speed"},
+    bloom = {"hat_bloom_int", "hat_bloom_size", "hat_bloom_thr"},
+    grad = {"grad_mode", "grad_col_a", "grad_col_b", "grad_sat", "grad_angle", "grad_spin", "grad_trans", "grad_fade"},
+    xhLook = {"xh_len", "xh_gap", "xh_thick", "xh_dot", "xh_dot_size", "xh_outline", "xh_trans"},
+    xhColor = {"xh_mode", "xh_col_a", "xh_col_b", "xh_speed"},
+    wm = {"wm_pos", "wm_trans"},
+}
+local seen = {}
+for name in pairs(KEYS) do seen[name] = {} end
+
+----------------------------------------------------------------------------
+-- lighting. The game's value of a property is remembered the first time it is touched and given back when it is no
+-- longer needed (one property with restore, everything of a feature with release). If the game changes the property
+-- meanwhile (a new map, a day/night cycle), that new value is the game's value from then on: it is what the color is
+-- mixed with, and it is never overwritten by an old one when the property is given back.
+----------------------------------------------------------------------------
+local function Holder()
+    local saved, index = {}, {}
+    local H = {}
+    -- e.last = what the property held right after our last write. A different value now means the game wrote it
+    local function entry(inst, prop)
+        local m = index[inst]
+        return m and m[prop]
+    end
+    function H.base(inst, prop)   -- the game's own value
+        local cur = inst[prop]
+        local e = entry(inst, prop)
+        if not e then return cur end
+        if cur ~= e.last then e.value, e.last, e.target = cur, cur, nil end   -- the game wrote it: that is its value now
+        return e.value
+    end
+    function H.set(inst, prop, v)
+        local m = index[inst]
+        if not m then
+            m = {}
+            index[inst] = m
+        end
+        local e = m[prop]
+        local cur = inst[prop]
+        if not e then
+            e = {inst = inst, prop = prop, value = cur, last = cur}
+            m[prop] = e
+            saved[#saved + 1] = e
+        elseif cur ~= e.last then
+            e.value, e.last, e.target = cur, cur, nil
+        end
+        if e.target ~= v then   -- only write what is new (numbers come back rounded, so targets are compared)
+            if cur ~= v then inst[prop] = v end
+            e.target = v
+            e.last = inst[prop]
+        end
+    end
+    local function give(e)   -- the game's value goes back, unless the game wrote the property after us
+        pcall(function()
+            if e.inst[e.prop] == e.last then e.inst[e.prop] = e.value end
+        end)
+    end
+    function H.restore(inst, prop)
+        local e = entry(inst, prop)
+        if not e then return end
+        give(e)
+        index[inst][prop] = nil
+        for i, x in ipairs(saved) do
+            if x == e then
+                table.remove(saved, i)
+                break
+            end
+        end
+    end
+    function H.release()
+        for _, e in ipairs(saved) do give(e) end
+        saved, index = {}, {}
+    end
+    function H.active() return #saved > 0 end
+    return H
+end
+local worldHold, timeHold = Holder(), Holder()
+
+-- effects we put in Lighting. The game can take them out or delete them: put them back, or make new ones
+local fx = {}
+
+local function dropFx(name)
+    local o = fx[name]
+    fx[name] = nil
+    if o then pcall(function() o:Destroy() end) end
+end
+
+local function keepFx(name, class, label)   -- returns the effect and whether it is new
+    local cur = fx[name]
+    if cur and cur.Parent == Lighting then return cur, false end
+    if cur then
+        local ok = pcall(function() cur.Parent = Lighting end)
+        if ok and cur.Parent == Lighting then return cur, false end
+    end
+    local o = Instance.new(class)
+    o.Name = label
+    o.Parent = Lighting
+    fx[name] = o
+    return o, true
+end
+
+-- world color: ambient light, the color shift of lit surfaces, fog / atmosphere haze and a screen tint, each one
+-- moved from the game's own value toward the color by "Strength"
+local WORLD_PROPS = {
+    {"world_amb", {"Ambient", "OutdoorAmbient"}},
+    {"world_shift", {"ColorShift_Top", "ColorShift_Bottom"}},
+}
+
+local function worldStep(t)
+    if not S.world_on then
+        if worldHold.active() then worldHold.release() end
+        dropFx("tint")
+        return
+    end
+    local c = paint(S.world_mode, col(S.world_col_a), col(S.world_col_b), S.world_sat, t * S.world_speed, 0)
+    local amt = math.clamp(S.world_amt, 0, 1)
+
+    for _, g in ipairs(WORLD_PROPS) do
+        for _, prop in ipairs(g[2]) do
+            if S[g[1]] then
+                worldHold.set(Lighting, prop, worldHold.base(Lighting, prop):Lerp(c, amt))
+            else
+                worldHold.restore(Lighting, prop)
+            end
+        end
+    end
+
+    -- maps with an Atmosphere ignore the old fog: its haze color and the color of its horizon are tinted too
+    local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
+    if S.world_fog then
+        worldHold.set(Lighting, "FogColor", worldHold.base(Lighting, "FogColor"):Lerp(c, amt))
+        if atmo then
+            worldHold.set(atmo, "Color", worldHold.base(atmo, "Color"):Lerp(c, amt))
+            worldHold.set(atmo, "Decay", worldHold.base(atmo, "Decay"):Lerp(c, amt))
+        end
+    else
+        worldHold.restore(Lighting, "FogColor")
+        if atmo then
+            worldHold.restore(atmo, "Color")
+            worldHold.restore(atmo, "Decay")
+        end
+    end
+
+    if S.world_tint then
+        local tint = keepFx("tint", "ColorCorrectionEffect", "RagWareTint")
+        local want = Color3.new(1, 1, 1):Lerp(c, amt)
+        if tint.TintColor ~= want then tint.TintColor = want end
+    else
+        dropFx("tint")
+    end
+end
+
+local function timeStep()
+    if S.time_on then
+        timeHold.set(Lighting, "ClockTime", math.clamp(S.time_val, 0, 24))
+    elseif timeHold.active() then
+        timeHold.release()
+    end
+end
+
+-- the bloom of the china hat: the glow of Neon needs bloom, and many games have none
+local function bloomStep()
+    if S.hat_on and S.hat_bloom then
+        local b, fresh = keepFx("bloom", "BloomEffect", "RagWareBloom")
+        local dirty = changed(seen.bloom, KEYS.bloom)
+        if fresh or dirty then
+            b.Enabled = true
+            b.Intensity = S.hat_bloom_int
+            b.Size = S.hat_bloom_size
+            b.Threshold = S.hat_bloom_thr
+        end
+    else
+        dropFx("bloom")
+        seen.bloom = {}
+    end
+end
+
+----------------------------------------------------------------------------
+-- china hat. Body: 48 triangular faces (two WedgeParts each, no steps), every face with its own color, so the
+-- rainbow turns around the cone. No mesh or asset, so nothing can fail to load. Ring on the base: Beams with glow.
+-- A PointLight lights what is around it. All of it hangs on the Head with a single Weld, so it follows the
+-- animation without jitter.
+----------------------------------------------------------------------------
+local SIDES = 48       -- faces of the cone and segments of the ring (more = smoother)
+local THICK = 0.002    -- thickness of the faces (thin, so the seam does not show)
+local hat              -- the hat that exists right now
+local hs = {busy = false, fails = 0, last = -math.huge, check = 0, paint = 0}
+
+-- point k (0 to SIDES) of the circle on the base
+local function basePoint(k, radius)
+    local t = k / SIDES * math.pi * 2
+    return Vector3.new(math.cos(t) * radius, 0, math.sin(t) * radius)
+end
+
+-- Every face of the cone is the triangle (apex, p0, p1), made of two WedgeParts. The line from the apex to the middle
+-- of the base splits the triangle into two right halves and no neighbouring edge is left broken, so the surface does
+-- not crack. In a WedgePart the right angle is at the bottom and back: Y points to the apex, Z to the middle of the base.
+local function faceFrames(apex, p0, p1)
+    local mid = (p0 + p1) / 2
+    local up = apex - mid
+    local slant = up.Magnitude
+    up = up / slant
+    local along = (p1 - p0).Unit
+    local size = Vector3.new(THICK, slant, (p1 - p0).Magnitude / 2)
+    return size,
+        CFrame.fromMatrix((apex + p1) / 2, up:Cross(-along), up, -along),
+        CFrame.fromMatrix((apex + p0) / 2, up:Cross(along), up, along)
+end
+
+local function destroyHat()
+    if hat then pcall(function() hat.folder:Destroy() end) end
+    hat = nil
+end
+
+-- shape: size, height, position
+local function applyShape()
+    if not hat then return end
+    local R, H = math.max(S.hat_radius, 0.05), math.max(S.hat_height, 0.05)   -- never a flat or empty cone
+    local apex = Vector3.new(0, H, 0)
+
+    hat.headWeld.C0 = CFrame.new(0, hat.top + S.hat_lift, 0)
+
+    for k, f in ipairs(hat.faces) do
+        local size, cf1, cf2 = faceFrames(apex, basePoint(k - 1, R), basePoint(k, R))
+        f[1].part.Size = size
+        f[1].weld.C0 = cf1
+        f[2].part.Size = size
+        f[2].weld.C0 = cf2
+    end
+
+    for i, a in ipairs(hat.pts) do
+        a.Position = basePoint(i - 1, R)
+    end
+
+    for _, b in ipairs(hat.ringBeams) do
+        b.Width0 = S.hat_thick
+        b.Width1 = S.hat_thick
+    end
+end
+
+-- look: transparency, glow, what is visible
+local function applyStyle()
+    if not hat then return end
+    local off = hat.fp == true   -- hidden in first person
+
+    local material = S.hat_glow > 0.2 and Enum.Material.Neon or Enum.Material.SmoothPlastic
+    local bodyT = (off or not S.hat_fill) and 1 or S.hat_trans
+    for _, f in ipairs(hat.faces) do
+        for _, w in ipairs(f) do
+            w.part.Material = material
+            w.part.Transparency = bodyT
+        end
+    end
+
+    local ringT = NumberSequence.new(math.clamp(S.hat_trans * 0.35, 0, 1))
+    for _, b in ipairs(hat.ringBeams) do
+        b.Enabled = (not off) and S.hat_ring
+        b.Transparency = ringT
+        b.LightEmission = S.hat_glow
+    end
+
+    hat.light.Enabled = (not off) and S.hat_light > 0.01
+    hat.light.Brightness = S.hat_light * 2
+    hat.light.Range = 4 + S.hat_light * 12
+end
+
+-- colors (called at about 30 Hz while the mode is animated)
+local function updateColors(t)
+    if not hat then return end
+    local a, b = col(S.hat_col_a), col(S.hat_col_b)
+    local mode, sat, phase = S.hat_mode, S.hat_sat, t * S.hat_speed
+
+    for k, f in ipairs(hat.faces) do
+        local c = paint(mode, a, b, sat, phase, (k - 0.5) / SIDES)
+        f[1].part.Color = c
+        f[2].part.Color = c
+    end
+    for i, bm in ipairs(hat.ringBeams) do
+        bm.Color = ColorSequence.new(paint(mode, a, b, sat, phase, (i - 1) / SIDES),
+            paint(mode, a, b, sat, phase, i / SIDES))
+    end
+    hat.light.Color = paint(mode, a, b, sat, phase, 0)
+end
+
+local function buildHat(char)
+    local head = char:WaitForChild("Head", 10)
+    if not head or LP.Character ~= char or not S.hat_on then return end
+    destroyHat()
+    local leftover = char:FindFirstChild("RagWareHat")   -- left over from a build that failed
+    if leftover then leftover:Destroy() end
+
+    -- on R6 the head is a Part with a SpecialMesh, and the mesh is taller than the Part
+    local mesh = head:FindFirstChildOfClass("SpecialMesh")
+    local top = head.Size.Y / 2 * (mesh and mesh.Scale.Y or 1)
+
+    local folder = Instance.new("Folder")
+    folder.Name = "RagWareHat"
+    folder.Parent = char
+
+    local function part(name, class)
+        local p = Instance.new(class or "Part")
+        p.Name = name
+        p.Anchored = false
+        p.CanCollide = false
+        p.CanQuery = false
+        p.CanTouch = false
+        p.Massless = true
+        p.CastShadow = false
+        p.Material = Enum.Material.Neon
+        p.CFrame = head.CFrame
+        p.Parent = folder
+        return p
+    end
+
+    local function weld(a, b)
+        local w = Instance.new("Weld")
+        w.Part0 = a
+        w.Part1 = b
+        w.Parent = b
+        return w
+    end
+
+    local root = part("Root")
+    root.Size = Vector3.new(0.2, 0.2, 0.2)
+    root.Transparency = 1
+    local headWeld = weld(head, root)
+
+    local faces = {}
+    for k = 1, SIDES do
+        local a = part("Face" .. k .. "a", "WedgePart")
+        local b = part("Face" .. k .. "b", "WedgePart")
+        faces[k] = {
+            {part = a, weld = weld(root, a)},
+            {part = b, weld = weld(root, b)},
+        }
+    end
+
+    local pts = {}
+    for i = 1, SIDES do
+        local a = Instance.new("Attachment")
+        a.Name = "P" .. i
+        a.Parent = root
+        pts[i] = a
+    end
+
+    local function beam(a0, a1)
+        local b = Instance.new("Beam")
+        b.Attachment0 = a0
+        b.Attachment1 = a1
+        b.FaceCamera = true
+        b.Segments = 1
+        b.LightInfluence = 0
+        b.Parent = root
+        return b
+    end
+
+    local ringBeams = {}
+    for i = 1, SIDES do
+        ringBeams[i] = beam(pts[i], pts[i % SIDES + 1])
+    end
+
+    -- its own light: shines on any rig and with any lighting technology
+    local light = Instance.new("PointLight")
+    light.Shadows = false
+    light.Parent = root
+
+    hat = {
+        folder = folder, head = head, headWeld = headWeld, top = top,
+        faces = faces, pts = pts, ringBeams = ringBeams, light = light,
+    }
+    seen.hatShape, seen.hatStyle, seen.hatColor = {}, {}, {}
+    changed(seen.hatShape, KEYS.hatShape)
+    changed(seen.hatStyle, KEYS.hatStyle)
+    changed(seen.hatColor, KEYS.hatColor)
+    applyShape()
+    applyStyle()
+    updateColors(clock)
+end
+
+-- makes sure the current head has a hat: respawn, a new head, or a hat the game deleted
+local function ensureHat()
+    local char = LP.Character
+    if hs.busy or hs.fails >= 3 or not char then return end
+    local head = char:FindFirstChild("Head")
+    if not head then return end
+    if hat and hat.head == head and hat.folder.Parent then return end
+    if os.clock() - hs.last < 2 then return end
+
+    hs.busy = true
+    hs.last = os.clock()
+    task.spawn(function()
+        local ok, err = pcall(buildHat, char)
+        hs.busy = false
+        if ok then
+            hs.fails = 0
+        else
+            hs.fails = hs.fails + 1
+            warn("[ragware:hat] could not build the hat: " .. tostring(err))
+        end
+    end)
+end
+
+local function hatStep(dt)
+    if not S.hat_on then
+        if hat then destroyHat() end
+        hs.fails = 0
+        return
+    end
+
+    hs.check = hs.check + dt
+    if hs.check >= 0.5 then
+        hs.check = 0
+        ensureHat()
+    end
+    if not (hat and hat.head.Parent) then return end
+
+    -- first person: the hat hides when the camera is inside the head
+    local restyle = false
+    local cam = Workspace.CurrentCamera
+    if cam then
+        local near = S.hat_hide_fp and (cam.CFrame.Position - hat.head.Position).Magnitude < 1.6
+        if near ~= hat.fp then
+            hat.fp = near
+            restyle = true
+        end
+    end
+
+    if changed(seen.hatShape, KEYS.hatShape) then applyShape() end
+    if changed(seen.hatStyle, KEYS.hatStyle) or restyle then applyStyle() end
+    if changed(seen.hatColor, KEYS.hatColor) then
+        updateColors(clock)
+    else
+        hs.paint = hs.paint + dt
+        if hs.paint >= 1 / 30 then
+            hs.paint = 0
+            if S.hat_mode ~= "Solid" and S.hat_speed > 0 then updateColors(clock) end
+        end
+    end
+end
+
+----------------------------------------------------------------------------
+-- screen gradient, crosshair, watermark: small GUIs in the overlay (under the menu, over the game).
+-- They are built once and only shown or hidden. A part is stored in its table only when it is fully built,
+-- so a failed build just leaves that cosmetic out.
+----------------------------------------------------------------------------
+local gradient, xh, wm = {}, {}, {frames = 0, time = 0, ping = 0}
+
+local function buildGradient()
+    local f = Instance.new("Frame")
+    f.Name = "RagWareGradient"
+    f.Size = UDim2.fromScale(1, 1)
+    f.BackgroundColor3 = Color3.new(1, 1, 1)
+    f.BorderSizePixel = 0
+    f.Active = false   -- never takes a click: the game underneath stays usable
+    f.Visible = false
+    f.ZIndex = 0
+    f.Parent = overlay
+    local g = Instance.new("UIGradient")
+    g.Parent = f
+    gradient.frame, gradient.grad = f, g
+end
+
+local function gradStep(t)
+    local f, g = gradient.frame, gradient.grad
+    if not f then return end
+    if not S.grad_on then
+        f.Visible = false
+        return
+    end
+    f.Visible = true
+    local dirty = changed(seen.grad, KEYS.grad)
+    if dirty then
+        f.BackgroundTransparency = math.clamp(S.grad_trans, 0, 1)
+        g.Transparency = S.grad_fade and NumberSequence.new(0, 1) or NumberSequence.new(0)
+    end
+    if S.grad_spin > 0 then
+        g.Rotation = (S.grad_angle + t * S.grad_spin) % 360
+    elseif dirty then
+        g.Rotation = S.grad_angle
+    end
+    if S.grad_mode == "Rainbow" then
+        if dirty or S.grad_speed > 0 then   -- the hue wheel, scrolling along the gradient
+            local phase, sat, keys = t * S.grad_speed, math.clamp(S.grad_sat, 0, 1), {}
+            for i = 0, 6 do
+                keys[#keys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV((phase + i / 6) % 1, sat, 1))
+            end
+            g.Color = ColorSequence.new(keys)
+        end
+    elseif dirty then
+        g.Color = ColorSequence.new(col(S.grad_col_a), col(S.grad_col_b))
+    end
+end
+
+local function buildCrosshair()
+    local root = Instance.new("Frame")
+    root.Name = "RagWareCrosshair"
+    root.AnchorPoint = Vector2.new(0.5, 0.5)
+    root.Position = UDim2.fromScale(0.5, 0.5)
+    root.Size = UDim2.fromOffset(4, 4)   -- the pivot of the spin: its arms are placed around its center
+    root.BackgroundTransparency = 1
+    root.BorderSizePixel = 0
+    root.Active = false
+    root.Visible = false
+    root.ZIndex = 0
+    root.Parent = overlay
+    local parts, strokes = {}, {}
+    for i = 1, 5 do   -- 1 to 4 = the arms (up, down, left, right), 5 = the dot
+        local f = Instance.new("Frame")
+        f.Name = (i == 5) and "Dot" or ("Arm" .. i)
+        f.AnchorPoint = Vector2.new(0.5, 0.5)
+        f.BorderSizePixel = 0
+        f.Active = false
+        f.ZIndex = 0
+        f.Parent = root
+        local s = Instance.new("UIStroke")
+        s.Color = Color3.new(0, 0, 0)
+        s.Thickness = 1
+        s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        s.Parent = f
+        parts[i], strokes[i] = f, s
+    end
+    xh.root, xh.parts, xh.strokes = root, parts, strokes
+end
+
+local function xhStep(t)
+    local root = xh.root
+    if not root then return end
+    if not S.xh_on then
+        root.Visible = false
+        return
+    end
+    root.Visible = true
+    local p = xh.parts
+
+    if changed(seen.xhLook, KEYS.xhLook) then
+        local len, gap, th = math.max(S.xh_len, 0), math.max(S.xh_gap, 0), math.max(S.xh_thick, 1)
+        local off = gap + len / 2
+        p[1].Size, p[1].Position = UDim2.fromOffset(th, len), UDim2.new(0.5, 0, 0.5, -off)
+        p[2].Size, p[2].Position = UDim2.fromOffset(th, len), UDim2.new(0.5, 0, 0.5, off)
+        p[3].Size, p[3].Position = UDim2.fromOffset(len, th), UDim2.new(0.5, -off, 0.5, 0)
+        p[4].Size, p[4].Position = UDim2.fromOffset(len, th), UDim2.new(0.5, off, 0.5, 0)
+        local ds = math.max(S.xh_dot_size, 0)
+        p[5].Size, p[5].Position = UDim2.fromOffset(ds, ds), UDim2.fromScale(0.5, 0.5)
+        for i = 1, 4 do p[i].Visible = len > 0 end
+        p[5].Visible = S.xh_dot and ds > 0
+        local tr = math.clamp(S.xh_trans, 0, 1)
+        for i = 1, 5 do
+            p[i].BackgroundTransparency = tr
+            xh.strokes[i].Enabled = S.xh_outline
+            xh.strokes[i].Transparency = tr
+        end
+    end
+
+    local mode = S.xh_mode
+    local repaint = changed(seen.xhColor, KEYS.xhColor)
+    if repaint or (mode ~= "Solid" and S.xh_speed > 0) then
+        local a, b, phase = col(S.xh_col_a), col(S.xh_col_b), t * S.xh_speed
+        for i = 1, 4 do p[i].BackgroundColor3 = paint(mode, a, b, 0.9, phase, (i - 1) / 4) end
+        p[5].BackgroundColor3 = paint(mode, a, b, 0.9, phase, 0)
+    end
+
+    local follow = S.xh_follow and not isMobile
+    if follow then
+        local m = UIS:GetMouseLocation()
+        root.Position = UDim2.fromOffset(m.X, m.Y)
+    elseif xh.following ~= false then
+        root.Position = UDim2.fromScale(0.5, 0.5)
+    end
+    xh.following = follow
+
+    if S.xh_spin > 0 then
+        root.Rotation = (t * S.xh_spin) % 360
+    elseif root.Rotation ~= 0 then
+        root.Rotation = 0
+    end
+end
+
+local WM_POS = {
+    ["Top left"] = {Vector2.new(0, 0), UDim2.new(0, 12, 0, 12)},
+    ["Top center"] = {Vector2.new(0.5, 0), UDim2.new(0.5, 0, 0, 12)},
+    ["Top right"] = {Vector2.new(1, 0), UDim2.new(1, -12, 0, 12)},
+    ["Bottom left"] = {Vector2.new(0, 1), UDim2.new(0, 12, 1, -12)},
+    ["Bottom right"] = {Vector2.new(1, 1), UDim2.new(1, -12, 1, -12)},
+}
+
+local function buildWatermark()
+    -- colors are theme roles, so the watermark follows the theme
+    local f = new("Frame", {Name = "RagWareWatermark", AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 26),
+        BackgroundColor3 = "bg", BorderSizePixel = 0, Visible = false, ZIndex = 0}, overlay)
+    new("UICorner", {CornerRadius = UDim.new(0, 5)}, f)
+    new("UIStroke", {Color = "accent", Thickness = 1}, f)
+    new("UIPadding", {PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)}, f)
+    local label = W.text(f, "", {Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, TextSize = 13,
+        RichText = true})
+    wm.frame, wm.label = f, label
+end
+
+local function wmStep(dt)
+    local f = wm.frame
+    if not f then return end
+    if not S.wm_on then
+        f.Visible = false
+        return
+    end
+    f.Visible = true
+    if changed(seen.wm, KEYS.wm) then
+        local pos = WM_POS[S.wm_pos] or WM_POS["Top center"]
+        f.AnchorPoint, f.Position = pos[1], pos[2]
+        f.BackgroundTransparency = math.clamp(S.wm_trans, 0, 1)
+    end
+
+    wm.frames = wm.frames + 1
+    wm.time = wm.time + dt
+    if wm.time < 0.25 then return end   -- the text is rebuilt 4 times a second
+    local fps = math.floor(wm.frames / wm.time + 0.5)
+    wm.frames, wm.time = 0, 0
+
+    local parts = {}
+    local name = tostring(S.wm_name):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")   -- it is rich text
+    if name ~= "" then
+        local a = S.ui_accent
+        parts[#parts + 1] = string.format('<font color="rgb(%d,%d,%d)">%s</font>',
+            math.floor(a[1] + 0.5), math.floor(a[2] + 0.5), math.floor(a[3] + 0.5), name)
+    end
+    if S.wm_fps then parts[#parts + 1] = fps .. " fps" end
+    if S.wm_ping then
+        local ok, v = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
+        if ok and type(v) == "number" then wm.ping = v end
+        parts[#parts + 1] = math.floor(wm.ping + 0.5) .. " ms"
+    end
+    if S.wm_time then parts[#parts + 1] = os.date("%H:%M") end
+    wm.label.Text = table.concat(parts, '  <font color="rgb(120,120,120)">|</font>  ')
+end
+
+----------------------------------------------------------------------------
+-- entry points. Every part runs on its own, so one that fails never stops the others
+----------------------------------------------------------------------------
+local steps = {
+    {safe("world", worldStep), "t"}, {safe("time", timeStep)}, {safe("bloom", bloomStep)},
+    {safe("hat", hatStep), "dt"}, {safe("gradient", gradStep), "t"}, {safe("crosshair", xhStep), "t"},
+    {safe("watermark", wmStep), "dt"},
+}
+
+function cosStep(dt)
+    clock = clock + dt
+    for _, s in ipairs(steps) do
+        s[1](s[2] == "t" and clock or dt)
+    end
+end
+
+function cosClear()
+    pcall(destroyHat)
+    pcall(worldHold.release)
+    pcall(timeHold.release)
+    for name in pairs(fx) do dropFx(name) end
+    pcall(function() gradient.frame:Destroy() end)
+    pcall(function() xh.root:Destroy() end)
+    pcall(function() wm.frame:Destroy() end)
+end
+
+for _, build in ipairs({buildGradient, buildCrosshair, buildWatermark}) do
+    local ok, err = pcall(build)
+    if not ok then warn("[ragware:cosmetics] " .. tostring(err)) end
+end
+
+conn(LP.CharacterAdded:Connect(function()
+    hs.fails, hs.last = 0, -math.huge
+end))
+conn(LP.CharacterRemoving:Connect(destroyHat))
+end   -- end of the cosmetics block
 Loader.mark("Starting")
 ----------------------------------------------------------------------------
 -- main loop (after the camera script, so the ESP reads the final camera)
@@ -4917,6 +5769,7 @@ local function renderStep(dt)
 
     espUpdate(c, eye)
     CH.update(dt, c, eye)
+    cosStep(dt)
 
     statusClock = statusClock + dt
     if statusClock > 0.15 then
@@ -5014,6 +5867,7 @@ local function unload()
     for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
     pcall(CH.clear)
     pcall(espClear)
+    pcall(cosClear)
     pcall(Loader.destroy)
     pcall(function() gui:Destroy() end)
     pcall(function() overlay:Destroy() end)
