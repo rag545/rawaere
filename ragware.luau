@@ -10,6 +10,7 @@ local Teams        = game:GetService("Teams")
 
 local LP       = Players.LocalPlayer
 local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
+local IS_STRIKE_FORCE = game.PlaceId == 13197060622
 
 local ENV = (getgenv and getgenv()) or _G
 if ENV.__RAGWARE_UNLOAD then pcall(ENV.__RAGWARE_UNLOAD) end
@@ -185,6 +186,15 @@ local DEFAULTS = {
     trigger = false, trigger_part = "Any", trigger_mode = "Click", fire_method = "Auto",
     trigger_delay = 40, trigger_interval = 90, trigger_range = 1000, trigger_radius = 3,
     trigger_aimkey = false,
+    -- silent aim (Unnamed Shooter: PlaceId 14202073004 only)
+    sa_on = false, sa_fov = 100, sa_part = "Head", sa_team = true,
+    sa_show_fov = true, sa_fov_color = {255, 100, 100}, sa_fov_thick = 1.5,
+    sa_key = "Q",
+    sa_autoshoot = false, sa_shoot_delay = 0.08,
+    -- bullet tracers (Unnamed Shooter: PlaceId 14202073004 only)
+    tr_on = false, tr_color_mode = "Solid",
+    tr_col_a = {255, 200, 50}, tr_col_b = {255, 50, 50},
+    tr_thick = 1.5, tr_duration = 0.3, tr_trans = 0.3,
     -- screen tap (touch devices): where it lands is set with the tap marker (theme); how it is sent is set here
     tap_method = "Auto", tap_hold = 40, tap_jitter = 0,
     -- spinbot (spin_pause: stops spinning while you shoot, so the shot goes straight)
@@ -225,6 +235,8 @@ local DEFAULTS = {
     -- team colors (used by esp and chams)
     team_mode = "Team colors", team_colors = {}, col_ally = {90, 170, 255}, col_enemy = {255, 90, 90},
     col_noteam = {200, 200, 200}, esp_target_color = {255, 214, 10},
+    -- Strike Force team colors (Team attr: 2=CT, 1=T)
+    sf_col_ct = {90, 170, 255}, sf_col_t = {255, 200, 50},
     -- player
     walk_on = false, walk = 32, jump_on = false, jump = 90, infjump = false, noclip = false,
     fly = false, fly_speed = 60, camfov_on = false, camfov = 90, grav_on = false, grav = 100, antiafk = false,
@@ -438,7 +450,39 @@ local function safe(tag, fn)
     end
 end
 
-local function sameTeam(p) return LP.Team ~= nil and p.Team == LP.Team end
+-- getSFTeam: reads Team attribute from the player's Status Configuration.
+-- Works for Strike Force and any game that stores team data this way.
+-- Returns the raw value (number 1/2 or string "T"/"CT") or nil.
+local function getSFTeam(p)
+    local status = p:FindFirstChild("Status")
+    if not status then return nil end
+    local ok, v = pcall(function() return status:GetAttribute("Team") end)
+    return (ok and v ~= nil) and v or nil
+end
+
+-- Normalise whatever getSFTeam returns to a canonical integer: 2=CT, 1=T.
+local function normTeam(v)
+    if v == nil then return nil end
+    local n = tonumber(v)
+    if n then return n end
+    local up = tostring(v):upper()
+    if up == "CT" then return 2 end
+    if up == "T"  then return 1 end
+    return nil
+end
+
+-- sameTeam: Roblox Teams first; falls back to Status.Team attribute for
+-- games that use their own team system (no Roblox Teams service).
+-- No PlaceId gate — works automatically whenever LP has no Roblox team.
+local function sameTeam(p)
+    if LP.Team ~= nil then
+        return p.Team == LP.Team
+    end
+    local my    = normTeam(getSFTeam(LP))
+    local their = normTeam(getSFTeam(p))
+    if my ~= nil and their ~= nil then return my == their end
+    return false
+end
 
 -- module tables (filled in the logic part; the UI buttons call into them at click time)
 local TR = {state = "off", note = "", lastActive = -1000}   -- triggerbot
@@ -520,11 +564,28 @@ function TC.rgb(c) return {math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0
 function TC.default(team) return TC.rgb(team.TeamColor.Color) end
 
 function TC.of(p)
+    -- No Roblox team: use Status.Team attribute (Strike Force and similar).
+    if p.Team == nil then
+        if S.team_mode == "Ally / Enemy" then
+            return col(sameTeam(p) and S.col_ally or S.col_enemy)
+        end
+        local sfTeam = normTeam(getSFTeam(p))
+        if S.team_mode == "Custom per team" then
+            local name = (sfTeam == 2) and "CT" or (sfTeam == 1) and "T" or nil
+            if name then
+                local c = S.team_colors[name]
+                if c then return col(c) end
+            end
+        end
+        if sfTeam == 2 then return col(S.sf_col_ct) end
+        if sfTeam == 1 then return col(S.sf_col_t) end
+        return col(S.col_noteam)
+    end
+    -- Standard Roblox Teams
     if S.team_mode == "Ally / Enemy" then
         return col(sameTeam(p) and S.col_ally or S.col_enemy)
     end
     local team = p.Team
-    if not team then return col(S.col_noteam) end
     if S.team_mode == "Custom per team" then
         local c = S.team_colors[team.Name]
         if c then return col(c) end
@@ -2815,6 +2876,19 @@ PlayerList(card, {
      end},
 }, true)
 
+-- Silent Aim -----------------------------------------------------------------
+card = Card(PC, "Silent Aim", 1)
+sb = Feature(card, "Silent Aim", "sa_on", {desc = "RaycastModule hook — Unnamed Shooter (14202073004)"})
+Keybind(sb, "Toggle key", "sa_key", true, "Keyboard shortcut to toggle silent aim")
+DK(sb, "Target part", "sa_part", {"Head", "Torso", "HumanoidRootPart"}, nil, "Part bullets redirect to")
+Toggle(sb, "Ignore teammates", "sa_team", nil, "Skip players on your own team")
+sb = Feature(card, "Auto shoot", "sa_autoshoot", {desc = "Fires automatically when an enemy enters the FOV"})
+SK(sb, "Fire delay", "sa_shoot_delay", 0.01, 0.5, 0.01, " s", nil, "Minimum time between auto shots")
+sb = Feature(card, "FOV circle", "sa_show_fov")
+SK(sb, "Radius", "sa_fov", 0, 800, 5, " px")
+ColorRow(sb, "Color", "sa_fov_color")
+SK(sb, "Thickness", "sa_fov_thick", 0, 4, 0.5, "")
+
 -- Visual ------------------------------------------------------------------
 local PV = pages.Visual
 
@@ -2927,27 +3001,54 @@ function rebuildTeams()
         if c:IsA("GuiObject") then c:Destroy() end
     end
     W.setSink({})   -- these rows are rebuilt from scratch, so they must not pile up in the global refresh list
-    local mine = LP.Team
-    teamStatus.Text = mine and mine.Name or "None"
-    if S.team_mode == "Custom per team" then
-        local list = Teams:GetTeams()
-        table.sort(list, function(a, b) return a.Name < b.Name end)
-        for _, tm in ipairs(list) do
-            local name = tm.Name
-            ColorRowG(teamBox, name .. ((mine == tm) and "  (you)" or ""),
-                function() return S.team_colors[name] or TC.default(tm) end,
-                function(c) S.team_colors[name] = c end)
+    -- Detect team system: no Roblox Teams + local player has Status.Team attr
+    --   => custom-team game (Strike Force etc.); otherwise standard Roblox Teams.
+    local usesStatusTeams = (LP.Team == nil and getSFTeam(LP) ~= nil)
+                         or (LP.Team == nil and game.PlaceId == 13197060622)
+    if usesStatusTeams then
+        local sfTeam = normTeam(getSFTeam(LP))
+        teamStatus.Text = (sfTeam == 2) and "CT" or (sfTeam == 1) and "T" or "None (waiting to spawn)"
+        if S.team_mode == "Team colors" then
+            ColorRow(teamBox, "CT (Counter Terrorist)", "sf_col_ct")
+            ColorRow(teamBox, "T (Terrorist)",          "sf_col_t")
+        elseif S.team_mode == "Custom per team" then
+            ColorRowG(teamBox, "CT" .. (sfTeam == 2 and "  (you)" or ""),
+                function() return S.team_colors["CT"] or S.sf_col_ct end,
+                function(c) S.team_colors["CT"] = c end)
+            ColorRowG(teamBox, "T" .. (sfTeam == 1 and "  (you)" or ""),
+                function() return S.team_colors["T"] or S.sf_col_t end,
+                function(c) S.team_colors["T"] = c end)
+            Button(teamBox, "Reset team colors", function()
+                S.team_colors = {}
+                rebuildTeams()
+            end)
+        elseif S.team_mode == "Ally / Enemy" then
+            ColorRow(teamBox, "Your team",       "col_ally")
+            ColorRow(teamBox, "All other teams", "col_enemy")
         end
-        if #list == 0 then
-            text(teamBox, "This game has no teams", {Size = UDim2.new(1, 0, 0, RH), TextSize = 12, TextColor3 = "dim"})
+    else
+        local mine = LP.Team
+        teamStatus.Text = mine and mine.Name or "None"
+        if S.team_mode == "Custom per team" then
+            local list = Teams:GetTeams()
+            table.sort(list, function(a, b) return a.Name < b.Name end)
+            for _, tm in ipairs(list) do
+                local name = tm.Name
+                ColorRowG(teamBox, name .. ((mine == tm) and "  (you)" or ""),
+                    function() return S.team_colors[name] or TC.default(tm) end,
+                    function(c) S.team_colors[name] = c end)
+            end
+            if #list == 0 then
+                text(teamBox, "This game has no teams", {Size = UDim2.new(1, 0, 0, RH), TextSize = 12, TextColor3 = "dim"})
+            end
+            Button(teamBox, "Reset team colors", function()
+                S.team_colors = {}
+                rebuildTeams()
+            end)
+        elseif S.team_mode == "Ally / Enemy" then
+            ColorRow(teamBox, "Your team",       "col_ally")
+            ColorRow(teamBox, "All other teams", "col_enemy")
         end
-        Button(teamBox, "Reset team colors", function()
-            S.team_colors = {}
-            rebuildTeams()
-        end)
-    elseif S.team_mode == "Ally / Enemy" then
-        ColorRow(teamBox, "Your team", "col_ally")
-        ColorRow(teamBox, "All other teams", "col_enemy")
     end
     ColorRow(teamBox, "No team", "col_noteam", nil, "Players that are not on any team")
     W.setSink(nil)
@@ -3284,6 +3385,15 @@ Toggle(sb, "Center dot", "xh_dot")
 SK(sb, "Dot size", "xh_dot_size", 0, 12, 1, " px")
 SK(sb, "Spin", "xh_spin", 0, 720, 10, " deg/s", nil, "Turns the crosshair around. 0 = still")
 Toggle(sb, "Follow the mouse", "xh_follow", nil, "Needs a mouse. Off = the middle of the screen")
+
+card = Card(PCO, "Bullet Tracers", 1)
+sb = Feature(card, "Bullet tracers", "tr_on", {desc = "Line from Muzzle to hit on each shot — Unnamed Shooter (14202073004) only"})
+DK(sb, "Color mode", "tr_color_mode", FX_MODES, nil, "Solid = color A. Gradient = A fades to B over tracer life. Rainbow = hue wheel")
+ColorRow(sb, "Color A", "tr_col_a")
+ColorRow(sb, "Color B", "tr_col_b", nil, "Used by Gradient")
+SK(sb, "Thickness", "tr_thick", 0, 8, 0.5, " px")
+SK(sb, "Duration", "tr_duration", 0.05, 2, 0.05, " s", nil, "How long the tracer stays on screen")
+SK(sb, "Transparency", "tr_trans", 0, 1, 0.05, "")
 
 card = Card(PCO, "Lighting", 2)
 sb = Feature(card, "World color", "world_on", {desc = "Tints the lighting of the map. Only you see it"})
@@ -4021,6 +4131,280 @@ do
         end
     end
 end
+----------------------------------------------------------------------------
+-- silent aim + auto shoot + bullet tracers (Unnamed Shooter: 14202073004)
+-- NO PlaceId gate on FOV circle, keybind, autoshoot — game.PlaceId returns 0
+-- on medium exploits at inject time, so gates would silently block everything.
+-- RaycastModule hook and tracer __namecall hook fail gracefully via pcall if
+-- the module / metamethod API is absent.
+----------------------------------------------------------------------------
+do
+    local SA_RS = game:GetService("ReplicatedStorage")
+
+    -- ── helpers ────────────────────────────────────────────────────────────
+    -- muzzle attachment: Workspace.ViewModel first (this game puts weapons there
+    -- not in the character — confirmed from WeaponModule stack trace), then
+    -- character tool as fallback.
+    local function getMuzzle()
+        -- primary: scan Workspace.ViewModel for a Muzzle/GunPoint attachment
+        local vm = Workspace:FindFirstChild("ViewModel")
+        if vm then
+            for _, a in ipairs(vm:GetDescendants()) do
+                if a:IsA("Attachment") and
+                   (a.Name == "Muzzle" or a.Name == "GunPoint" or a.Name == "Barrel") then
+                    return a
+                end
+            end
+            -- no attachment found — use any BasePart named Barrel/Handle as origin
+            for _, p in ipairs(vm:GetDescendants()) do
+                if p:IsA("BasePart") and
+                   (p.Name == "Barrel" or p.Name == "Handle" or p.Name == "Gun") then
+                    return p
+                end
+            end
+        end
+        -- fallback: character tool
+        local ch = LP.Character
+        if ch then
+            for _, obj in ipairs(ch:GetChildren()) do
+                if obj:IsA("Tool") then
+                    for _, a in ipairs(obj:GetDescendants()) do
+                        if a:IsA("Attachment") and a.Name == "Muzzle" then return a end
+                    end
+                    local h = obj:FindFirstChild("Handle")
+                    if h then return h end
+                end
+            end
+        end
+        return nil
+    end
+
+    -- screen colour for tracer based on mode and lifetime fraction (0=new, 1=expired)
+    local function tracerColor(frac)
+        if S.tr_color_mode == "Rainbow" then
+            return Color3.fromHSV((os.clock() * 0.3) % 1, 1, 1)
+        elseif S.tr_color_mode == "Gradient" then
+            local a, b = col(S.tr_col_a), col(S.tr_col_b)
+            return a:Lerp(b, math.clamp(frac, 0, 1))
+        end
+        return col(S.tr_col_a)
+    end
+
+    -- ── FOV circle ─────────────────────────────────────────────────────────
+    local saCircle       = Drawing.new("Circle")
+    saCircle.Filled      = false
+    saCircle.NumSides    = 100
+    saCircle.Visible     = false
+
+    conn(RunService.RenderStepped:Connect(function()
+        if unloading then saCircle.Visible = false return end
+        local c = Workspace.CurrentCamera
+        if not c then return end
+        saCircle.Position    = c.ViewportSize * 0.5
+        saCircle.Radius      = S.sa_fov
+        saCircle.Color       = col(S.sa_fov_color)
+        saCircle.Thickness   = S.sa_fov_thick
+        saCircle.Transparency = 1
+        saCircle.Visible     = S.sa_show_fov
+    end))
+
+    -- ── target selection ───────────────────────────────────────────────────
+    local function saClosest()
+        local c = Workspace.CurrentCamera
+        if not c then return nil end
+        local org = c.ViewportSize * 0.5
+        local best, bestD = nil, math.huge
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p == LP then continue end
+            if S.sa_team and sameTeam(p) then continue end
+            if LIST.isIgnored(p) then continue end
+            local ch = p.Character
+            if not ch then continue end
+            local root = ch:FindFirstChild("HumanoidRootPart")
+            if not root then continue end
+            local sp, onScreen = c:WorldToViewportPoint(root.Position)
+            if not onScreen or sp.Z <= 0 then continue end
+            local d2 = (Vector2.new(sp.X, sp.Y) - org).Magnitude
+            if d2 < S.sa_fov and d2 < bestD then best, bestD = ch, d2 end
+        end
+        return best
+    end
+
+    local function saPart(ch)
+        if S.sa_part == "HumanoidRootPart" then
+            return ch:FindFirstChild("HumanoidRootPart")
+        elseif S.sa_part == "Torso" then
+            return ch:FindFirstChild("UpperTorso") or ch:FindFirstChild("Torso")
+        else
+            return ch:FindFirstChild("Head")
+        end
+    end
+
+    -- ── RaycastModule hook ─────────────────────────────────────────────────
+    -- tracer is spawned here on every intercepted call — this is the most
+    -- accurate trigger: fires exactly when the game's shoot function runs,
+    -- whether SA redirected the shot or not. InputBegan / __namecall hooks
+    -- are unreliable on this executor; the RaycastModule interception is not.
+    local ok, rayM = pcall(function()
+        return require(SA_RS.Events.Modules.RaycastModule)
+    end)
+    if ok and type(rayM) == "table" then
+        for k, fn in pairs(rayM) do
+            if type(fn) ~= "function" then continue end
+            local orig = fn
+            rayM[k] = function(...)
+                -- tracer: task.spawn is safer than task.defer on this executor.
+                -- pcall wrapper ensures tracer errors never leak into the return
+                -- value and break WeaponModule.Shoot.
+                if S.tr_on then pcall(task.spawn, spawnTracer) end
+                if not S.sa_on then return orig(...) end
+                local ch = saClosest()
+                if not ch then return orig(...) end
+                local part = saPart(ch)
+                if not part then return orig(...) end
+                return part, part.Position, Vector3.zero
+            end
+        end
+        warn("[ragware:silentaim] hook OK")
+    else
+        warn("[ragware:silentaim] RaycastModule not found")
+    end
+
+    -- ── auto shoot ─────────────────────────────────────────────────────────
+    -- fires ONCE per target acquisition: when an enemy enters the FOV from
+    -- outside it, one shot. if the enemy leaves and re-enters, one more shot.
+    -- sa_shoot_delay = minimum cooldown between shots so it can't double-fire
+    -- on the same frame the target flickers in/out.
+    local saHadTarget = false
+    local saLastShot  = 0
+    conn(RunService.Heartbeat:Connect(function()
+        if not S.sa_on or not S.sa_autoshoot or unloading then return end
+        local ch  = saClosest()
+        local now = os.clock()
+        if ch and not saHadTarget then
+            -- target just entered FOV — fire once
+            if now - saLastShot >= S.sa_shoot_delay then
+                if TR.fire() then saLastShot = now end
+            end
+        end
+        saHadTarget = ch ~= nil
+    end))
+
+    -- ── bullet tracers ─────────────────────────────────────────────────────
+    -- active tracer pool: {line=Drawing.Line, born=os.clock(), from=Vector3, dir=Vector3, hitDist=number}
+    local activeTracers = {}
+
+    -- raycast from pos in dir, ignore all characters, return hit distance (studs)
+    local tracerParams = RaycastParams.new()
+    tracerParams.FilterType = Enum.RaycastFilterType.Exclude
+    tracerParams.IgnoreWater = true
+
+    local function tracerRaycast(pos, dir)
+        -- build exclusion list: all characters (same approach as Vis.filter)
+        local exclude = {}
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Character then table.insert(exclude, p.Character) end
+        end
+        tracerParams.FilterDescendantsInstances = exclude
+        local result = Workspace:Raycast(pos, dir * 10000, tracerParams)
+        return result and result.Distance or 10000
+    end
+
+    -- spawn a tracer toward the shot direction.
+    -- From is always screen-centre (muzzle is behind camera in first-person;
+    -- projecting it gives on1=false and the line never renders).
+    -- endPos is the 3-D hit point, projected to screen in RenderStepped.
+    local function spawnTracer()
+        if not S.tr_on then return end
+        local c = Workspace.CurrentCamera
+        if not c then return end
+
+        -- origin for raycast: muzzle worldpos if found, else camera position
+        local muzzle = getMuzzle()
+        local origin
+        if muzzle then
+            origin = muzzle:IsA("Attachment") and muzzle.WorldPosition or muzzle.Position
+        else
+            origin = c.CFrame.Position
+        end
+
+        -- direction: toward SA target if active and present, else camera LookVector
+        local dir = c.CFrame.LookVector
+        if S.sa_on then
+            local ch = saClosest()
+            if ch then
+                local part = saPart(ch)
+                if part then dir = (part.Position - origin).Unit end
+            end
+        end
+
+        local hitDist = tracerRaycast(origin, dir)
+        local endPos  = origin + dir * hitDist
+
+        local line        = Drawing.new("Line")
+        line.Thickness    = S.tr_thick
+        line.Transparency = 1
+        line.Visible      = false
+
+        table.insert(activeTracers, {
+            line   = line,
+            born   = os.clock(),
+            endPos = endPos,
+        })
+    end
+
+    -- RenderStepped: update all active tracers
+    conn(RunService.RenderStepped:Connect(function()
+        if unloading then
+            for _, t in ipairs(activeTracers) do t.line:Remove() end
+            table.clear(activeTracers)
+            return
+        end
+        local c   = Workspace.CurrentCamera
+        local now = os.clock()
+        local i   = 1
+        while i <= #activeTracers do
+            local t    = activeTracers[i]
+            local age  = now - t.born
+            local frac = age / S.tr_duration
+            if age >= S.tr_duration or not c then
+                t.line:Remove()
+                table.remove(activeTracers, i)
+            else
+                -- From: screen centre (muzzle is behind camera in first-person).
+                -- To:   projected endPos. Z>0 = in front of camera, so the line
+                --       draws even when the endpoint is off the visible rectangle
+                --       (gives the "infinite tracer" effect past screen edges).
+                -- Transparency fades 1→0 (Drawing: 1=opaque, 0=invisible).
+                local sp2 = c:WorldToViewportPoint(t.endPos)
+                if sp2.Z > 0 then
+                    t.line.From         = c.ViewportSize * 0.5
+                    t.line.To           = Vector2.new(sp2.X, sp2.Y)
+                    t.line.Color        = tracerColor(frac)
+                    t.line.Transparency = math.clamp(1 - frac, 0, 1)
+                    t.line.Thickness    = S.tr_thick
+                    t.line.Visible      = true
+                else
+                    t.line.Visible = false
+                end
+                i = i + 1
+            end
+        end
+    end))
+
+    -- tracer is now spawned directly inside the RaycastModule hook above,
+    -- which fires on every shot with perfect timing. no InputBegan needed.
+
+    -- ── keybind ────────────────────────────────────────────────────────────
+    conn(UIS.InputBegan:Connect(function(input, processed)
+        if processed or UIS:GetFocusedTextBox() then return end
+        if S.sa_key ~= "None" and matches(input, S.sa_key) then
+            S.sa_on = not S.sa_on
+            refreshAll()
+        end
+    end))
+end
+
 Loader.mark("Loading visuals")
 ----------------------------------------------------------------------------
 -- chams
